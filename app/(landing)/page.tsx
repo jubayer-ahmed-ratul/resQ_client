@@ -1,6 +1,3 @@
-import Navbar from "@/components/layout/navbar";
-import Footer from "@/components/layout/footer";
-
 import Hero from "@/components/sections/homepage/hero";
 import ProblemSection from "@/components/sections/homepage/problem-section";
 import Workflow from "@/components/sections/homepage/workflow";
@@ -10,21 +7,17 @@ import Reoptimization from "@/components/sections/homepage/reoptimization";
 import Architecture from "@/components/sections/homepage/architecture";
 import FinalCta from "@/components/sections/homepage/final-cta";
 
-export default function Home() {
+export default function HomePage() {
   return (
     <>
-      <Navbar />
-      <main id="main-content">
-        <Hero />
-        <ProblemSection />
-        <Workflow />
-        <FeaturesSection />
-        <DecisionEngine />
-        <Reoptimization />
-        <Architecture />
-        <FinalCta />
-      </main>
-      <Footer />
+      <Hero />
+      <ProblemSection />
+      <Workflow />
+      <FeaturesSection />
+      <DecisionEngine />
+      <Reoptimization />
+      <Architecture />
+      <FinalCta />
     </>
   );
 }
