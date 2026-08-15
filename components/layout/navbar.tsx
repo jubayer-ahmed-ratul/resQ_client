@@ -86,12 +86,12 @@ export default function Navbar() {
   };
 
   return (
-    <div className="fixed top-0 left-0 w-full z-50 transition-all duration-300">
+    <div className="fixed top-[5px] left-0 w-full z-50 transition-all duration-300">
       {/* Navbar Container */}
       <div
         className={`mx-auto rounded-xl flex items-center justify-between transition-all duration-500 ease-in-out ${
           scrolled
-            ? "bg-white/95 backdrop-blur-md shadow-lg w-11/12 px-6 mt-3"
+            ? "bg-white/70 backdrop-blur-xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(11,31,51,0.12)] border border-white/40 w-11/12 px-6 mt-3"
             : "bg-transparent w-11/12"
         }`}
         style={{

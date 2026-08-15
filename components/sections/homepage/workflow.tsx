@@ -1,136 +1,187 @@
+
+"use client";
+
 import {
   PhoneIncoming,
   ScanSearch,
   GitMerge,
   Send,
   RefreshCw,
+  ArrowRight,
 } from "lucide-react";
+import { motion } from "framer-motion";
 
 const steps = [
   {
     number: "01",
-    Icon:   PhoneIncoming,
-    title:  "Emergency Request",
-    desc:   "Emergency incident enters the system.",
+    Icon: PhoneIncoming,
+    title: "Emergency Request",
+    desc: "Emergency incident enters the system.",
   },
   {
     number: "02",
-    Icon:   ScanSearch,
-    title:  "Priority Analysis",
-    desc:   "Severity, urgency, and incident context are analyzed.",
+    Icon: ScanSearch,
+    title: "Priority Analysis",
+    desc: "Severity, urgency, and incident context are analyzed.",
   },
   {
     number: "03",
-    Icon:   GitMerge,
-    title:  "Resource Matching",
-    desc:   "Available emergency resources are evaluated and matched.",
+    Icon: GitMerge,
+    title: "Resource Matching",
+    desc: "Available emergency resources are evaluated and matched.",
   },
   {
     number: "04",
-    Icon:   Send,
-    title:  "Dispatch",
-    desc:   "The selected resource and hospital receive the assignment.",
+    Icon: Send,
+    title: "Dispatch",
+    desc: "The selected resource and hospital receive the assignment.",
   },
   {
     number: "05",
-    Icon:   RefreshCw,
-    title:  "Dynamic Re-optimization",
-    desc:   "If conditions change, assignments are recalculated.",
+    Icon: RefreshCw,
+    title: "Dynamic Re-optimization",
+    desc: "If conditions change, assignments are recalculated.",
   },
 ];
+
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: {
+    opacity: 0,
+    y: 25,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.55,
+      ease: [0.22, 1, 0.36, 1] as const,
+    },
+  },
+};
 
 export default function Workflow() {
   return (
     <section
       id="how-it-works"
-      className="py-20 md:py-28"
-      style={{ backgroundColor: "#EEF3F7" }}
+      className="relative overflow-hidden bg-[#EEF3F7] py-20 sm:py-24 lg:py-20"
       aria-labelledby="workflow-heading"
     >
-      <div className="site-container">
-        {/* Section header */}
-        <div className="text-center mb-14">
+      {/* Subtle background decoration */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+      >
+        <div className="absolute -left-32 top-0 h-72 w-72 rounded-full bg-cyan-100/30 blur-3xl" />
+        <div className="absolute -right-32 bottom-0 h-80 w-80 rounded-full bg-emerald-100/30 blur-3xl" />
+
+        <div className="absolute left-[12%] top-[18%] h-1.5 w-1.5 rounded-full bg-emerald-400/40" />
+        <div className="absolute right-[15%] top-[30%] h-2 w-2 rounded-full bg-cyan-400/30" />
+      </div>
+
+      <div className="site-container relative z-10">
+        {/* Section Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.3 }}
+          transition={{ duration: 0.6 }}
+          className="mx-auto mb-14 max-w-3xl text-center lg:mb-16"
+        >
+        
+
           <h2
             id="workflow-heading"
-            className="text-3xl sm:text-4xl font-bold tracking-tight mb-4"
-            style={{ color: "#0B1F33" }}
+            className="text-3xl font-bold tracking-tight text-[#0B1F33] sm:text-4xl lg:text-[2.75rem] lg:leading-tight"
           >
-            From Emergency to Action
+            From Emergency{" "}
+            <span className="text-[#19C3B1]">to Action</span>
           </h2>
-          <p
-            className="text-lg max-w-2xl mx-auto leading-relaxed"
-            style={{ color: "#6B7280" }}
-          >
+
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 sm:text-lg">
             resq turns incoming emergency requests into optimized response
             decisions.
           </p>
-        </div>
+        </motion.div>
 
-        {/* Steps – horizontal on md+, vertical on mobile */}
-        <div className="relative">
-          {/* Connecting line – desktop only */}
-          <div
-            className="hidden md:block absolute top-[2.6rem] left-0 right-0 h-px"
-            style={{
-              background:
-                "linear-gradient(to right, transparent 0%, rgba(11,31,51,0.15) 10%, rgba(11,31,51,0.15) 90%, transparent 100%)",
-            }}
-            aria-hidden="true"
-          />
+        {/* Workflow */}
+        <motion.ol
+          variants={containerVariants}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, amount: 0.15 }}
+          className="relative grid grid-cols-1 gap-5 md:grid-cols-5 md:gap-3 lg:gap-5"
+        >
+          {/* Desktop connecting line — removed */}
 
-          <ol className="grid grid-cols-1 md:grid-cols-5 gap-8 md:gap-4 relative">
-            {steps.map(({ number, Icon, title, desc }, idx) => (
-              <li
-                key={number}
-                className="flex flex-col items-center text-center relative"
+          {steps.map(({ number, Icon, title, desc }, idx) => (
+            <motion.li
+              key={number}
+              variants={itemVariants}
+              className="group relative"
+            >
+              {/* Mobile connector — removed */}
+
+              {/* Card */}
+              <div className="relative flex h-full flex-col items-center rounded-2xl border border-white/80 bg-white/75 px-4 py-6 text-center shadow-[0_5px_25px_rgba(11,31,51,0.04)] backdrop-blur-sm transition-all duration-300 group-hover:-translate-y-1 group-hover:border-emerald-200 group-hover:bg-white group-hover:shadow-[0_15px_40px_rgba(11,31,51,0.09)] md:border-transparent md:bg-transparent md:px-3 md:py-4 md:shadow-none md:backdrop-blur-0 md:group-hover:border-white/80 md:group-hover:bg-white/80 md:group-hover:shadow-[0_15px_40px_rgba(11,31,51,0.07)]"
               >
-                {/* Vertical connector line – mobile only */}
-                {idx < steps.length - 1 && (
-                  <div
-                    className="md:hidden absolute left-1/2 top-full w-px h-8 mt-px -translate-x-1/2"
-                    style={{ backgroundColor: "rgba(11,31,51,0.15)" }}
-                    aria-hidden="true"
-                  />
-                )}
+                {/* Icon */}
+                <div className="relative z-10 mb-5">
+                  {/* Outer glow */}
+                  <div className="absolute inset-0 rounded-full bg-emerald-300/20 opacity-0 blur-xl transition-opacity duration-300 group-hover:opacity-100" />
 
-                {/* Icon circle */}
-                <div className="relative flex items-center justify-center mb-4 z-10">
-                  <div
-                    className="flex items-center justify-center w-[5.5rem] h-[5.5rem] rounded-full border-2 bg-white"
-                    style={{ borderColor: "rgba(11,31,51,0.12)" }}
-                  >
+                  {/* Icon circle */}
+                  <div className="relative flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-full border border-slate-200 bg-white shadow-[0_5px_18px_rgba(11,31,51,0.08)] transition-all duration-300 group-hover:border-emerald-300 group-hover:shadow-[0_8px_25px_rgba(25,195,177,0.18)]">
                     <Icon
-                      className="w-7 h-7"
-                      style={{ color: "#0B1F33" }}
-                      strokeWidth={1.5}
+                      className="h-6 w-6 text-[#0B1F33] transition-colors duration-300 group-hover:text-[#19C3B1]"
+                      strokeWidth={1.6}
+                      aria-hidden="true"
                     />
                   </div>
-                  {/* Step number badge */}
-                  <span
-                    className="absolute -top-1 -right-1 flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold text-white"
-                    style={{ backgroundColor: "#19C3B1" }}
-                  >
+
+                  {/* Number badge */}
+                  <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-[#EEF3F7] bg-[#19C3B1] text-[9px] font-bold tracking-wide text-white shadow-sm">
                     {number}
                   </span>
                 </div>
 
-                <h3
-                  className="text-sm font-semibold mb-1.5"
-                  style={{ color: "#243447" }}
-                >
+                {/* Text */}
+                <h3 className="mb-2 text-sm font-semibold leading-snug text-[#243447] transition-colors duration-300 group-hover:text-[#0B1F33] sm:text-[15px]">
                   {title}
                 </h3>
-                <p
-                  className="text-xs leading-relaxed max-w-[150px]"
-                  style={{ color: "#6B7280" }}
-                >
+
+                <p className="max-w-[170px] text-xs leading-5 text-slate-500">
                   {desc}
                 </p>
-              </li>
-            ))}
-          </ol>
-        </div>
+
+                {/* Arrow between desktop steps */}
+                {idx < steps.length - 1 && (
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="absolute -right-4 top-[3.25rem] z-20 hidden h-5 w-5 text-[#19C3B1] md:block"
+                    strokeWidth={2}
+                  />
+                )}
+              </div>
+            </motion.li>
+          ))}
+        </motion.ol>
+
+    
+        
+
+         
+       
       </div>
     </section>
   );
 }
+
