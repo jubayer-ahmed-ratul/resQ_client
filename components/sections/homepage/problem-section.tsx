@@ -90,12 +90,12 @@ export default function ProblemSection() {
 
           <h2
             id="problems-heading"
-            className="text-3xl font-bold tracking-tight text-[#0B1F33] sm:text-4xl lg:text-[2.75rem] lg:leading-tight"
+            className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-[#0B1F33]"
           >
             When Every <span className="text-[#19C3B1]">Second Matters</span>
           </h2>
 
-          <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 sm:text-lg">
+          <p className="text-lg max-w-2xl mx-auto leading-relaxed text-slate-500">
             Emergency teams often face multiple incidents, limited resources,
             and rapidly changing conditions at the same time.
           </p>

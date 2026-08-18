@@ -96,17 +96,17 @@ export default function Workflow() {
           transition={{ duration: 0.6 }}
           className="mx-auto mb-14 max-w-3xl text-center lg:mb-16"
         >
-        
+
 
           <h2
             id="workflow-heading"
-            className="text-3xl font-bold tracking-tight text-[#0B1F33] sm:text-4xl lg:text-[2.75rem] lg:leading-tight"
+            className="text-3xl sm:text-4xl font-bold tracking-tight mb-4 text-[#0B1F33]"
           >
             From Emergency{" "}
             <span className="text-[#19C3B1]">to Action</span>
           </h2>
 
-          <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-500 sm:text-lg">
+          <p className="text-lg max-w-2xl mx-auto leading-relaxed text-slate-500">
             resq turns incoming emergency requests into optimized response
             decisions.
           </p>
@@ -120,16 +120,12 @@ export default function Workflow() {
           viewport={{ once: true, amount: 0.15 }}
           className="relative grid grid-cols-1 gap-5 md:grid-cols-5 md:gap-3 lg:gap-5"
         >
-          {/* Desktop connecting line — removed */}
-
           {steps.map(({ number, Icon, title, desc }, idx) => (
             <motion.li
               key={number}
               variants={itemVariants}
               className="group relative"
             >
-              {/* Mobile connector — removed */}
-
               {/* Card */}
               <div className="relative flex h-full flex-col items-center rounded-2xl border border-white/80 bg-white/75 px-4 py-6 text-center shadow-[0_5px_25px_rgba(11,31,51,0.04)] backdrop-blur-sm transition-all duration-300 group-hover:-translate-y-1 group-hover:border-emerald-200 group-hover:bg-white group-hover:shadow-[0_15px_40px_rgba(11,31,51,0.09)] md:border-transparent md:bg-transparent md:px-3 md:py-4 md:shadow-none md:backdrop-blur-0 md:group-hover:border-white/80 md:group-hover:bg-white/80 md:group-hover:shadow-[0_15px_40px_rgba(11,31,51,0.07)]"
               >
@@ -174,12 +170,6 @@ export default function Workflow() {
             </motion.li>
           ))}
         </motion.ol>
-
-    
-        
-
-         
-       
       </div>
     </section>
   );

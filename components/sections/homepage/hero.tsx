@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { ArrowRight, ChevronRight, Zap, Clock, Activity, Shield, Globe } from "lucide-react";
+import { ArrowRight, ChevronRight, Clock, Activity, Shield } from "lucide-react";
 
 // Lazy-load the heavy dashboard simulator — keeps hero bundle small
 const EmergencyDashboard = dynamic(
@@ -50,9 +50,6 @@ export default function Hero() {
 
           {/* Left — copy */}
           <div className="flex flex-col gap-6">
-
-
-
             <div className="hero-fade-up hero-delay-200">
               <h1
                 id="hero-heading"
@@ -112,8 +109,6 @@ export default function Hero() {
                 </div>
               ))}
             </div>
-
-          
           </div>
 
           {/* Right — lazy dashboard */}
