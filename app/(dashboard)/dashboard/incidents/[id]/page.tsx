@@ -14,6 +14,7 @@ import {
   XCircle, History, ShieldCheck, RefreshCw, ClipboardList, GitMerge,
 } from "lucide-react";
 
+// ── Static maps ───────────────────────────────────────────────────────────────
 const severityColor: Record<Incident["severity"], string> = {
   LOW:      "bg-emerald-100 text-emerald-700",
   MEDIUM:   "bg-yellow-100 text-yellow-700",
@@ -35,15 +36,18 @@ const ALL_STATUSES: Incident["status"][] = [
   "PENDING", "VALIDATED", "PROCESSING", "ASSIGNED", "DISPATCHED", "RESOLVED", "CANCELLED",
 ];
 
-interface FactorBarProps {
-  label: string;
-  weighted: number;
-  maxWeight: number;
-  reason: string;
-}
+const decisionTypeMeta: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+  PRIORITY_CALCULATION:    { label: "Priority Calculation",   color: "#7C3AED", bg: "rgba(124,58,237,0.08)",  icon: "⚡" },
+  RESOURCE_RECOMMENDATION: { label: "Resource Recommendation", color: "#0B1F33", bg: "rgba(11,31,51,0.06)",   icon: "🚑" },
+  RESOURCE_ASSIGNMENT:     { label: "Resource Assignment",     color: "#19C3B1", bg: "rgba(25,195,177,0.08)", icon: "✅" },
+  RESOURCE_REJECTION:      { label: "Resource Rejected",       color: "#E63946", bg: "rgba(230,57,70,0.07)",  icon: "❌" },
+};
 
-function FactorBar({ label, weighted, maxWeight, reason }: FactorBarProps) {
-  const pct = maxWeight > 0 ? (weighted / maxWeight) * 100 : 0;
+// ── Sub-components ────────────────────────────────────────────────────────────
+function FactorBar({ label, weighted, maxWeight, reason }: {
+  label: string; weighted: number; maxWeight: number; reason: string;
+}) {
+  const pct   = maxWeight > 0 ? (weighted / maxWeight) * 100 : 0;
   const color = pct >= 80 ? "#E63946" : pct >= 60 ? "#F59E0B" : "#19C3B1";
   return (
     <div className="space-y-1">
@@ -54,51 +58,246 @@ function FactorBar({ label, weighted, maxWeight, reason }: FactorBarProps) {
         </span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-        <div
-          className="h-2 rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
+        <div className="h-2 rounded-full transition-all duration-700"
+          style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
       <p className="text-[11px]" style={{ color: "#9CA3AF" }}>{reason}</p>
     </div>
   );
 }
 
+function InfoItem({ Icon, label, value }: { Icon: React.ElementType; label: string; value: string }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        style={{ backgroundColor: "rgba(11,31,51,0.05)" }}>
+        <Icon className="h-4 w-4" style={{ color: "#0B1F33" }} strokeWidth={1.8} />
+      </div>
+      <div>
+        <p className="text-[11px] font-medium" style={{ color: "#9CA3AF" }}>{label}</p>
+        <p className="text-sm font-semibold" style={{ color: "#243447" }}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function StatBox({ icon, label, value }: { icon: string; label: string; value: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1 rounded-xl py-3 text-center"
+      style={{ backgroundColor: "rgba(11,31,51,0.04)", border: "1px solid rgba(11,31,51,0.07)" }}>
+      <span className="text-lg">{icon}</span>
+      <p className="text-sm font-bold" style={{ color: "#0B1F33" }}>{value}</p>
+      <p className="text-[11px]" style={{ color: "#9CA3AF" }}>{label}</p>
+    </div>
+  );
+}
+
+function DecisionLogCard({ log }: { log: DecisionLog }) {
+  const [expanded, setExpanded] = useState(false);
+  const meta = decisionTypeMeta[log.decisionType] ?? {
+    label: log.decisionType, color: "#6B7280", bg: "rgba(107,114,128,0.07)", icon: "📋",
+  };
+
+  return (
+    <div className="rounded-2xl border transition-all"
+      style={{ borderColor: "rgba(11,31,51,0.08)", backgroundColor: "rgba(11,31,51,0.01)" }}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span className="text-base">{meta.icon}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+              style={{ backgroundColor: meta.bg, color: meta.color }}>
+              {meta.label}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
+              {log.algorithmVersion}
+            </span>
+            {log.priorityScore !== null && (
+              <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+                style={{ backgroundColor: "rgba(25,195,177,0.1)", color: "#19C3B1" }}>
+                Score: {log.priorityScore.toFixed(1)}
+              </span>
+            )}
+          </div>
+          <p className="mt-0.5 text-[11px]" style={{ color: "#9CA3AF" }}>
+            {new Date(log.createdAt).toLocaleString()}
+          </p>
+        </div>
+        <button onClick={() => setExpanded(!expanded)}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors shrink-0">
+          {expanded
+            ? <ChevronUp className="h-4 w-4" style={{ color: "#6B7280" }} />
+            : <ChevronDown className="h-4 w-4" style={{ color: "#6B7280" }} />
+          }
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="border-t px-4 py-4 space-y-3"
+          style={{ borderColor: "rgba(11,31,51,0.06)" }}>
+          {log.selectedResourceId && (
+            <div>
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
+                Selected Resource
+              </p>
+              <p className="font-mono text-xs rounded-lg px-3 py-1.5"
+                style={{ backgroundColor: "rgba(25,195,177,0.07)", color: "#19C3B1", border: "1px solid rgba(25,195,177,0.2)" }}>
+                {log.selectedResourceId}
+              </p>
+            </div>
+          )}
+          {log.factors && Object.keys(log.factors).length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
+                Score Factors
+              </p>
+              <div className="space-y-2">
+                {Object.entries(log.factors).map(([key, val]) => {
+                  const f = val as Record<string, unknown>;
+                  return (
+                    <div key={key} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs"
+                      style={{ backgroundColor: "rgba(11,31,51,0.03)", border: "1px solid rgba(11,31,51,0.06)" }}>
+                      <span className="font-semibold capitalize" style={{ color: "#374151" }}>
+                        {key.replace(/([A-Z])/g, " $1").trim()}
+                      </span>
+                      <div className="flex items-center gap-3 text-right">
+                        {f.value !== undefined && (
+                          <span className="rounded-full px-2 py-0.5 font-medium"
+                            style={{ backgroundColor: "rgba(11,31,51,0.06)", color: "#6B7280" }}>
+                            {String(f.value)}
+                          </span>
+                        )}
+                        {f.contribution !== undefined && (
+                          <span className="font-bold" style={{ color: "#0B1F33" }}>
+                            +{Number(f.contribution).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
+              Full Explanation
+            </p>
+            <pre className="overflow-x-auto rounded-xl p-3 text-[11px] leading-relaxed"
+              style={{ backgroundColor: "rgba(11,31,51,0.04)", border: "1px solid rgba(11,31,51,0.08)", color: "#374151" }}>
+              {JSON.stringify(log.explanation, null, 2)}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReoptimizationLogCard({ log }: { log: ReoptimizationLog }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="rounded-2xl border transition-all"
+      style={{ borderColor: "rgba(11,31,51,0.08)", backgroundColor: "rgba(11,31,51,0.01)" }}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <span className="text-base">{log.replaced ? "🔄" : "✅"}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
+              style={{
+                backgroundColor: log.replaced ? "rgba(249,115,22,0.1)" : "rgba(25,195,177,0.1)",
+                color: log.replaced ? "#f97316" : "#19C3B1",
+              }}>
+              {log.replaced ? "Resource Replaced" : "No Change Needed"}
+            </span>
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
+              {log.triggeredBy}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs" style={{ color: "#6B7280" }}>{log.reason}</p>
+          <p className="mt-0.5 text-[11px]" style={{ color: "#9CA3AF" }}>
+            {new Date(log.createdAt).toLocaleString()}
+          </p>
+        </div>
+        <button onClick={() => setExpanded(!expanded)}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors shrink-0">
+          {expanded
+            ? <ChevronUp className="h-4 w-4" style={{ color: "#6B7280" }} />
+            : <ChevronDown className="h-4 w-4" style={{ color: "#6B7280" }} />
+          }
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="border-t px-4 py-4 space-y-3" style={{ borderColor: "rgba(11,31,51,0.06)" }}>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>Old Assignment</p>
+              <p className="font-mono" style={{ color: "#243447" }}>{log.oldAssignmentId.slice(0, 12)}…</p>
+            </div>
+            {log.newAssignmentId && (
+              <div>
+                <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>New Assignment</p>
+                <p className="font-mono" style={{ color: "#19C3B1" }}>{log.newAssignmentId.slice(0, 12)}…</p>
+              </div>
+            )}
+            <div>
+              <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>Old Resource</p>
+              <p className="font-mono" style={{ color: "#243447" }}>{log.oldResourceId.slice(0, 12)}…</p>
+            </div>
+            {log.newResourceId && (
+              <div>
+                <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>New Resource</p>
+                <p className="font-mono" style={{ color: "#19C3B1" }}>{log.newResourceId.slice(0, 12)}…</p>
+              </div>
+            )}
+          </div>
+          {Object.keys(log.details).length > 0 && (
+            <div>
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
+                Details
+              </p>
+              <pre className="overflow-x-auto rounded-xl p-3 text-[11px] leading-relaxed"
+                style={{ backgroundColor: "rgba(11,31,51,0.04)", border: "1px solid rgba(11,31,51,0.08)", color: "#374151" }}>
+                {JSON.stringify(log.details, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function IncidentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
 
-  const [incident, setIncident]         = useState<Incident | null>(null);
-  const [user, setUser]                 = useState<User | null>(null);
-  const [priority, setPriority]         = useState<PriorityResult | null>(null);
-  const [calcLoading, setCalcLoading]   = useState(false);
-  const [calcError, setCalcError]       = useState("");
+  const [incident, setIncident]             = useState<Incident | null>(null);
+  const [user, setUser]                     = useState<User | null>(null);
+  const [priority, setPriority]             = useState<PriorityResult | null>(null);
+  const [calcLoading, setCalcLoading]       = useState(false);
+  const [calcError, setCalcError]           = useState("");
   const [recommendation, setRecommendation] = useState<ResourceRecommendation | null>(null);
-  const [recLoading, setRecLoading]     = useState(false);
-  const [recError, setRecError]         = useState("");
-  const [showRejected, setShowRejected] = useState(false);
-  const [decisions, setDecisions]       = useState<DecisionLog[]>([]);
-  const [decLoading, setDecLoading]     = useState(false);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState("");
+  const [recLoading, setRecLoading]         = useState(false);
+  const [recError, setRecError]             = useState("");
+  const [showRejected, setShowRejected]     = useState(false);
+  const [decisions, setDecisions]           = useState<DecisionLog[]>([]);
+  const [decLoading, setDecLoading]         = useState(false);
+  const [reoptLogs, setReoptLogs]           = useState<ReoptimizationLog[]>([]);
+  const [reoptLoading, setReoptLoading]     = useState(false);
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState("");
 
-  // Reoptimization history
-  const [reoptLogs, setReoptLogs]       = useState<ReoptimizationLog[]>([]);
-  const [reoptLoading, setReoptLoading] = useState(false);
-
-  // Validate
-  const [validateLoading, setValidateLoading] = useState(false);
   const [validateLoading, setValidateLoading] = useState(false);
   const [validateError, setValidateError]     = useState("");
-
-  // Status change
-  const [statusLoading, setStatusLoading] = useState(false);
-  const [statusError, setStatusError]     = useState("");
-
-  // Assign resource
-  const [assignLoading, setAssignLoading] = useState(false);
-  const [assignError, setAssignError]     = useState("");
-  const [assignSuccess, setAssignSuccess] = useState(false);
+  const [statusLoading, setStatusLoading]     = useState(false);
+  const [statusError, setStatusError]         = useState("");
+  const [assignLoading, setAssignLoading]     = useState(false);
+  const [assignError, setAssignError]         = useState("");
+  const [assignSuccess, setAssignSuccess]     = useState(false);
 
   useEffect(() => {
     const token = getToken();
@@ -129,7 +328,6 @@ export default function IncidentDetailPage() {
 
   const canManage = user && ["ADMIN", "COORDINATOR"].includes(user.role);
 
-  // ── Validate ──────────────────────────────────────────────
   const handleValidate = async () => {
     const token = getToken();
     if (!token) return;
@@ -145,7 +343,6 @@ export default function IncidentDetailPage() {
     }
   };
 
-  // ── Status Change ─────────────────────────────────────────
   const handleStatusChange = async (newStatus: Incident["status"]) => {
     const token = getToken();
     if (!token || !incident || newStatus === incident.status) return;
@@ -161,7 +358,6 @@ export default function IncidentDetailPage() {
     }
   };
 
-  // ── Priority ──────────────────────────────────────────────
   const handleCalculatePriority = async () => {
     const token = getToken();
     if (!token) return;
@@ -178,7 +374,6 @@ export default function IncidentDetailPage() {
     }
   };
 
-  // ── Recommend Resource ────────────────────────────────────
   const handleRecommendResource = async () => {
     const token = getToken();
     if (!token) return;
@@ -196,7 +391,6 @@ export default function IncidentDetailPage() {
     }
   };
 
-  // ── Assign Resource ───────────────────────────────────────
   const handleAssignResource = async () => {
     const token = getToken();
     if (!token || !recommendation?.selectedResource) return;
@@ -209,10 +403,8 @@ export default function IncidentDetailPage() {
         token
       );
       setAssignSuccess(true);
-      // Refresh incident to reflect new status (ASSIGNED)
       const updated = await incidentApi.getById(id, token);
       setIncident(updated.data);
-      // Refresh decision log
       const logs = await decisionApi.listByIncident(id, token);
       setDecisions(logs.data);
     } catch (err) {
@@ -253,7 +445,6 @@ export default function IncidentDetailPage() {
       <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-5"
         style={{ borderColor: "rgba(11,31,51,0.08)" }}>
 
-        {/* Title + badges */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h2 className="text-xl font-bold" style={{ color: "#0B1F33" }}>{incident.title}</h2>
@@ -281,16 +472,12 @@ export default function IncidentDetailPage() {
             </div>
           </div>
 
-          {/* Admin actions — Validate + Status change */}
           {canManage && (
             <div className="flex flex-wrap items-center gap-2 shrink-0">
               {incident.status === "PENDING" && (
-                <button
-                  onClick={handleValidate}
-                  disabled={validateLoading}
+                <button onClick={handleValidate} disabled={validateLoading}
                   className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#14A89A] disabled:opacity-60"
-                  style={{ backgroundColor: "#19C3B1" }}
-                >
+                  style={{ backgroundColor: "#19C3B1" }}>
                   {validateLoading
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     : <ShieldCheck className="h-3.5 w-3.5" />
@@ -298,21 +485,17 @@ export default function IncidentDetailPage() {
                   Validate
                 </button>
               )}
-
-              {/* Status dropdown */}
               <div className="relative flex items-center gap-1.5 rounded-xl border px-3 py-2"
                 style={{ borderColor: "rgba(11,31,51,0.15)" }}>
                 {statusLoading
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: "#6B7280" }} />
                   : <RefreshCw className="h-3.5 w-3.5" style={{ color: "#6B7280" }} />
                 }
-                <select
-                  value={incident.status}
+                <select value={incident.status}
                   onChange={(e) => handleStatusChange(e.target.value as Incident["status"])}
                   disabled={statusLoading}
                   className="text-xs font-semibold bg-transparent outline-none cursor-pointer disabled:opacity-60"
-                  style={{ color: "#0B1F33" }}
-                >
+                  style={{ color: "#0B1F33" }}>
                   {ALL_STATUSES.map((s) => (
                     <option key={s} value={s}>{s}</option>
                   ))}
@@ -322,7 +505,6 @@ export default function IncidentDetailPage() {
           )}
         </div>
 
-        {/* Inline errors for validate/status */}
         {(validateError || statusError) && (
           <div className="rounded-xl border px-4 py-2.5 text-sm"
             style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
@@ -332,10 +514,8 @@ export default function IncidentDetailPage() {
 
         <div className="h-px" style={{ backgroundColor: "rgba(11,31,51,0.06)" }} />
 
-        {/* Description */}
         <p className="text-sm leading-relaxed" style={{ color: "#374151" }}>{incident.description}</p>
 
-        {/* Info grid */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <InfoItem Icon={AlertTriangle} label="Severity"         value={incident.severity} />
           <InfoItem Icon={Clock}         label="Time Sensitivity" value={incident.timeSensitivity} />
@@ -347,7 +527,6 @@ export default function IncidentDetailPage() {
           )}
         </div>
 
-        {/* Resource requirements */}
         {incident.resourceRequirements.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
@@ -381,12 +560,9 @@ export default function IncidentDetailPage() {
                 Greedy algorithm selects the best available resource
               </p>
             </div>
-            <button
-              onClick={handleRecommendResource}
-              disabled={recLoading}
+            <button onClick={handleRecommendResource} disabled={recLoading}
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1A3550] disabled:opacity-60"
-              style={{ backgroundColor: "#0B1F33" }}
-            >
+              style={{ backgroundColor: "#0B1F33" }}>
               {recLoading
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Finding…</>
                 : <><Truck className="h-4 w-4" /> Recommend Resource</>
@@ -406,7 +582,7 @@ export default function IncidentDetailPage() {
               {recommendation.selectedResource ? (
                 <div className="rounded-2xl border p-5 space-y-4"
                   style={{ borderColor: "rgba(25,195,177,0.25)", backgroundColor: "rgba(25,195,177,0.04)" }}>
-                  {/* Selected resource header */}
+
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl"
@@ -427,13 +603,10 @@ export default function IncidentDetailPage() {
                       </div>
                     </div>
 
-                    {/* Assign button */}
-                    <button
-                      onClick={handleAssignResource}
+                    <button onClick={handleAssignResource}
                       disabled={assignLoading || assignSuccess}
                       className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A] disabled:opacity-60"
-                      style={{ backgroundColor: assignSuccess ? "#19C3B1" : "#0B1F33" }}
-                    >
+                      style={{ backgroundColor: assignSuccess ? "#19C3B1" : "#0B1F33" }}>
                       {assignLoading
                         ? <><Loader2 className="h-4 w-4 animate-spin" /> Assigning…</>
                         : assignSuccess
@@ -443,7 +616,6 @@ export default function IncidentDetailPage() {
                     </button>
                   </div>
 
-                  {/* Assign error/success */}
                   {assignError && (
                     <div className="rounded-xl border px-4 py-2.5 text-sm"
                       style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
@@ -457,7 +629,6 @@ export default function IncidentDetailPage() {
                     </div>
                   )}
 
-                  {/* Stats */}
                   <div className="grid grid-cols-3 gap-3">
                     <StatBox icon="📍" label="Distance"
                       value={recommendation.estimatedDistanceKm !== null
@@ -469,7 +640,6 @@ export default function IncidentDetailPage() {
                       value={String(recommendation.selectedResource.capacity)} />
                   </div>
 
-                  {/* Reasons */}
                   <div>
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
                       Reasons
@@ -494,14 +664,11 @@ export default function IncidentDetailPage() {
                 </div>
               )}
 
-              {/* Rejected candidates */}
               {recommendation.rejectedCandidates.length > 0 && (
                 <div>
-                  <button
-                    onClick={() => setShowRejected(!showRejected)}
+                  <button onClick={() => setShowRejected(!showRejected)}
                     className="flex items-center gap-2 text-xs font-semibold transition-colors hover:text-[#0B1F33]"
-                    style={{ color: "#9CA3AF" }}
-                  >
+                    style={{ color: "#9CA3AF" }}>
                     {showRejected
                       ? <><ChevronUp className="h-3.5 w-3.5" /> Hide rejected candidates</>
                       : <><ChevronDown className="h-3.5 w-3.5" /> Show {recommendation.rejectedCandidates.length} rejected candidates</>
@@ -544,12 +711,9 @@ export default function IncidentDetailPage() {
             </p>
           </div>
           {canManage && (
-            <button
-              onClick={handleCalculatePriority}
-              disabled={calcLoading}
+            <button onClick={handleCalculatePriority} disabled={calcLoading}
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A] disabled:opacity-60"
-              style={{ backgroundColor: "#19C3B1" }}
-            >
+              style={{ backgroundColor: "#19C3B1" }}>
               {calcLoading
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Calculating…</>
                 : <><Zap className="h-4 w-4" /> Calculate Priority</>
@@ -623,11 +787,10 @@ export default function IncidentDetailPage() {
         )}
       </div>
 
-      {/* Decision Log — ADMIN / COORDINATOR only */}
+      {/* Decision Log */}
       {canManage && (
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-5"
           style={{ borderColor: "rgba(11,31,51,0.08)" }}>
-
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl"
               style={{ backgroundColor: "rgba(11,31,51,0.05)" }}>
@@ -650,7 +813,7 @@ export default function IncidentDetailPage() {
               style={{ backgroundColor: "rgba(11,31,51,0.03)", border: "1px solid rgba(11,31,51,0.07)" }}>
               <History className="h-5 w-5 shrink-0" style={{ color: "#9CA3AF" }} />
               <p className="text-sm" style={{ color: "#9CA3AF" }}>
-                No decision logs yet. Calculate priority or recommend a resource to generate logs.
+                No decision logs yet.
               </p>
             </div>
           ) : (
@@ -662,15 +825,11 @@ export default function IncidentDetailPage() {
           )}
         </div>
       )}
-    </div>
-  );
-}
 
-      {/* Re-optimization History — ADMIN / COORDINATOR only */}
+      {/* Re-optimization History */}
       {canManage && (
         <div className="rounded-2xl border bg-white p-6 shadow-sm space-y-5"
           style={{ borderColor: "rgba(11,31,51,0.08)" }}>
-
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl"
               style={{ backgroundColor: "rgba(249,115,22,0.08)" }}>
@@ -693,7 +852,7 @@ export default function IncidentDetailPage() {
               style={{ backgroundColor: "rgba(11,31,51,0.03)", border: "1px solid rgba(11,31,51,0.07)" }}>
               <GitMerge className="h-5 w-5 shrink-0" style={{ color: "#9CA3AF" }} />
               <p className="text-sm" style={{ color: "#9CA3AF" }}>
-                No re-optimizations yet. Trigger one from the Assignments page when conditions change.
+                No re-optimizations yet.
               </p>
             </div>
           ) : (
@@ -705,221 +864,6 @@ export default function IncidentDetailPage() {
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-// ── Reoptimization Log Card ───────────────────────────────────────────────────
-function ReoptimizationLogCard({ log }: { log: ReoptimizationLog }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="rounded-2xl border transition-all"
-      style={{ borderColor: "rgba(11,31,51,0.08)", backgroundColor: "rgba(11,31,51,0.01)" }}>
-      <div className="flex items-center gap-3 px-4 py-3">
-        <span className="text-base">{log.replaced ? "🔄" : "✅"}</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
-              style={{
-                backgroundColor: log.replaced ? "rgba(249,115,22,0.1)" : "rgba(25,195,177,0.1)",
-                color: log.replaced ? "#f97316" : "#19C3B1",
-              }}>
-              {log.replaced ? "Resource Replaced" : "No Change Needed"}
-            </span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
-              {log.triggeredBy}
-            </span>
-          </div>
-          <p className="mt-0.5 text-xs" style={{ color: "#6B7280" }}>{log.reason}</p>
-          <p className="mt-0.5 text-[11px]" style={{ color: "#9CA3AF" }}>
-            {new Date(log.createdAt).toLocaleString()}
-          </p>
-        </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
-        >
-          {expanded
-            ? <ChevronUp className="h-4 w-4" style={{ color: "#6B7280" }} />
-            : <ChevronDown className="h-4 w-4" style={{ color: "#6B7280" }} />
-          }
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="border-t px-4 py-4 space-y-3" style={{ borderColor: "rgba(11,31,51,0.06)" }}>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>Old Assignment</p>
-              <p className="font-mono" style={{ color: "#243447" }}>{log.oldAssignmentId.slice(0, 12)}…</p>
-            </div>
-            {log.newAssignmentId && (
-              <div>
-                <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>New Assignment</p>
-                <p className="font-mono" style={{ color: "#19C3B1" }}>{log.newAssignmentId.slice(0, 12)}…</p>
-              </div>
-            )}
-            <div>
-              <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>Old Resource</p>
-              <p className="font-mono" style={{ color: "#243447" }}>{log.oldResourceId.slice(0, 12)}…</p>
-            </div>
-            {log.newResourceId && (
-              <div>
-                <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>New Resource</p>
-                <p className="font-mono" style={{ color: "#19C3B1" }}>{log.newResourceId.slice(0, 12)}…</p>
-              </div>
-            )}
-          </div>
-          {Object.keys(log.details).length > 0 && (
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
-                Details
-              </p>
-              <pre className="overflow-x-auto rounded-xl p-3 text-[11px] leading-relaxed"
-                style={{ backgroundColor: "rgba(11,31,51,0.04)", border: "1px solid rgba(11,31,51,0.08)", color: "#374151" }}>
-                {JSON.stringify(log.details, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-const decisionTypeMeta: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  PRIORITY_CALCULATION:    { label: "Priority Calculation",   color: "#7C3AED", bg: "rgba(124,58,237,0.08)",  icon: "⚡" },
-  RESOURCE_RECOMMENDATION: { label: "Resource Recommendation", color: "#0B1F33", bg: "rgba(11,31,51,0.06)",   icon: "🚑" },
-  RESOURCE_ASSIGNMENT:     { label: "Resource Assignment",     color: "#19C3B1", bg: "rgba(25,195,177,0.08)", icon: "✅" },
-  RESOURCE_REJECTION:      { label: "Resource Rejected",       color: "#E63946", bg: "rgba(230,57,70,0.07)",  icon: "❌" },
-};
-
-function DecisionLogCard({ log }: { log: DecisionLog }) {
-  const [expanded, setExpanded] = useState(false);
-  const meta = decisionTypeMeta[log.decisionType] ?? {
-    label: log.decisionType, color: "#6B7280", bg: "rgba(107,114,128,0.07)", icon: "📋",
-  };
-
-  return (
-    <div className="rounded-2xl border transition-all"
-      style={{ borderColor: "rgba(11,31,51,0.08)", backgroundColor: "rgba(11,31,51,0.01)" }}>
-      <div className="flex items-center gap-3 px-4 py-3">
-        <span className="text-base">{meta.icon}</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
-              style={{ backgroundColor: meta.bg, color: meta.color }}>
-              {meta.label}
-            </span>
-            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-medium text-slate-500">
-              {log.algorithmVersion}
-            </span>
-            {log.priorityScore !== null && (
-              <span className="rounded-full px-2.5 py-0.5 text-[11px] font-bold"
-                style={{ backgroundColor: "rgba(25,195,177,0.1)", color: "#19C3B1" }}>
-                Score: {log.priorityScore.toFixed(1)}
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 text-[11px]" style={{ color: "#9CA3AF" }}>
-            {new Date(log.createdAt).toLocaleString()}
-          </p>
-        </div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
-        >
-          {expanded
-            ? <ChevronUp className="h-4 w-4" style={{ color: "#6B7280" }} />
-            : <ChevronDown className="h-4 w-4" style={{ color: "#6B7280" }} />
-          }
-        </button>
-      </div>
-
-      {expanded && (
-        <div className="border-t px-4 py-4 space-y-3"
-          style={{ borderColor: "rgba(11,31,51,0.06)" }}>
-          {log.selectedResourceId && (
-            <div>
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
-                Selected Resource
-              </p>
-              <p className="font-mono text-xs rounded-lg px-3 py-1.5"
-                style={{ backgroundColor: "rgba(25,195,177,0.07)", color: "#19C3B1", border: "1px solid rgba(25,195,177,0.2)" }}>
-                {log.selectedResourceId}
-              </p>
-            </div>
-          )}
-          {log.factors && Object.keys(log.factors).length > 0 && (
-            <div>
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
-                Score Factors
-              </p>
-              <div className="space-y-2">
-                {Object.entries(log.factors).map(([key, val]) => {
-                  const f = val as Record<string, unknown>;
-                  return (
-                    <div key={key} className="flex items-center justify-between rounded-xl px-3 py-2 text-xs"
-                      style={{ backgroundColor: "rgba(11,31,51,0.03)", border: "1px solid rgba(11,31,51,0.06)" }}>
-                      <span className="font-semibold capitalize" style={{ color: "#374151" }}>
-                        {key.replace(/([A-Z])/g, " $1").trim()}
-                      </span>
-                      <div className="flex items-center gap-3 text-right">
-                        {f.value !== undefined && (
-                          <span className="rounded-full px-2 py-0.5 font-medium"
-                            style={{ backgroundColor: "rgba(11,31,51,0.06)", color: "#6B7280" }}>
-                            {String(f.value)}
-                          </span>
-                        )}
-                        {f.contribution !== undefined && (
-                          <span className="font-bold" style={{ color: "#0B1F33" }}>
-                            +{Number(f.contribution).toFixed(2)}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
-              Full Explanation
-            </p>
-            <pre className="overflow-x-auto rounded-xl p-3 text-[11px] leading-relaxed"
-              style={{ backgroundColor: "rgba(11,31,51,0.04)", border: "1px solid rgba(11,31,51,0.08)", color: "#374151" }}>
-              {JSON.stringify(log.explanation, null, 2)}
-            </pre>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function InfoItem({ Icon, label, value }: { Icon: React.ElementType; label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-        style={{ backgroundColor: "rgba(11,31,51,0.05)" }}>
-        <Icon className="h-4 w-4" style={{ color: "#0B1F33" }} strokeWidth={1.8} />
-      </div>
-      <div>
-        <p className="text-[11px] font-medium" style={{ color: "#9CA3AF" }}>{label}</p>
-        <p className="text-sm font-semibold" style={{ color: "#243447" }}>{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function StatBox({ icon, label, value }: { icon: string; label: string; value: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1 rounded-xl py-3 text-center"
-      style={{ backgroundColor: "rgba(11,31,51,0.04)", border: "1px solid rgba(11,31,51,0.07)" }}>
-      <span className="text-lg">{icon}</span>
-      <p className="text-sm font-bold" style={{ color: "#0B1F33" }}>{value}</p>
-      <p className="text-[11px]" style={{ color: "#9CA3AF" }}>{label}</p>
     </div>
   );
 }

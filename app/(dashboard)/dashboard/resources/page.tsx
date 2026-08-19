@@ -137,7 +137,7 @@ export default function ResourcesPage() {
               <div className="mt-3 space-y-1.5">
                 <div className="flex items-center gap-2 text-xs" style={{ color: "#6B7280" }}>
                   <Users className="h-3.5 w-3.5" />
-                  Capacity: {res.capacity}
+                  {res.type === "RESCUE_TEAM" ? "Team Size" : "Capacity"}: {res.capacity}
                 </div>
                 <div className="flex items-center gap-2 text-xs" style={{ color: "#6B7280" }}>
                   <MapPin className="h-3.5 w-3.5" />
