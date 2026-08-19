@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -15,15 +15,44 @@ import {
   Menu,
   X,
   Bell,
+  Users,
+  UserCircle,
+  FileText,
 } from "lucide-react";
+import {
+  type AuthUser,
+  type UserRole,
+  getNavPermissions,
+  getStoredUser,
+  roleBadgeColor,
+  roleLabel,
+} from "@/lib/auth";
 
-const navItems = [
-  { label: "Dashboard",   href: "/dashboard",              Icon: LayoutDashboard },
-  { label: "Incidents",   href: "/dashboard/incidents",    Icon: AlertTriangle },
-  { label: "Resources",   href: "/dashboard/resources",    Icon: Truck },
-  { label: "Hospitals",   href: "/dashboard/hospitals",    Icon: Building2 },
-  { label: "Assignments", href: "/dashboard/assignments",  Icon: ClipboardList },
-];
+const ALL_NAV = [
+  { label: "Dashboard",   href: "/dashboard",                  Icon: LayoutDashboard, key: "dashboard"   },
+  { label: "Incidents",   href: "/dashboard/incidents",        Icon: AlertTriangle,   key: "incidents"   },
+  { label: "Resources",   href: "/dashboard/resources",        Icon: Truck,           key: "resources"   },
+  { label: "Hospitals",   href: "/dashboard/hospitals",        Icon: Building2,       key: "hospitals"   },
+  { label: "Assignments", href: "/dashboard/assignments",      Icon: ClipboardList,   key: "assignments" },
+  { label: "Users",       href: "/dashboard/users",            Icon: Users,           key: "users"       },
+  { label: "Audit Logs",  href: "/dashboard/audit-logs",       Icon: FileText,        key: "audit-logs"  },
+  { label: "My Profile",  href: "/dashboard/profile",          Icon: UserCircle,      key: "profile"     },
+] as const;
+
+function getVisibleNav(role: UserRole) {
+  const perms = getNavPermissions(role);
+  return ALL_NAV.filter((item) => {
+    if (item.key === "dashboard")   return true;
+    if (item.key === "incidents")   return perms.showIncidents;
+    if (item.key === "resources")   return perms.showResources;
+    if (item.key === "hospitals")   return perms.showHospitals;
+    if (item.key === "assignments") return perms.showAssignments;
+    if (item.key === "users")       return role === "ADMIN";
+    if (item.key === "audit-logs")  return role === "ADMIN" || role === "COORDINATOR";
+    if (item.key === "profile")     return true; // all roles
+    return false;
+  });
+}
 
 export default function DashboardLayout({
   children,
@@ -31,14 +60,27 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
+  const router   = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    const stored = getStoredUser();
+    if (!stored) {
+      router.replace("/login");
+      return;
+    }
+    setUser(stored);
+  }, [router]);
 
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     router.push("/login");
   };
+
+  const navItems = user ? getVisibleNav(user.role) : [];
+  const badge    = user ? roleBadgeColor[user.role] : null;
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "#F5F7FA" }}>
@@ -80,10 +122,38 @@ export default function DashboardLayout({
           </button>
         </div>
 
+        {/* User info pill */}
+        {user && badge && (
+          <div
+            className="mx-3 mt-3 rounded-xl px-3 py-2.5"
+            style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
+          >
+            <div className="flex items-center gap-2.5">
+              <div
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold text-white"
+                style={{ backgroundColor: "rgba(255,255,255,0.12)" }}
+              >
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white leading-tight">
+                  {user.name}
+                </p>
+                <span
+                  className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold leading-tight mt-0.5"
+                  style={{ backgroundColor: badge.bg, color: badge.text }}
+                >
+                  {roleLabel[user.role]}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
           {navItems.map(({ label, href, Icon }) => {
-            const active = pathname === href;
+            const active = pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
             return (
               <Link
                 key={href}
@@ -141,7 +211,6 @@ export default function DashboardLayout({
             <Menu className="w-5 h-5" style={{ color: "#0B1F33" }} />
           </button>
 
-          {/* Page title placeholder — children can override via context if needed */}
           <span className="hidden lg:block text-sm font-medium" style={{ color: "#6B7280" }}>
             resqBuddy Dashboard
           </span>
@@ -156,6 +225,16 @@ export default function DashboardLayout({
                 style={{ backgroundColor: "#E63946" }}
               />
             </button>
+
+            {/* Role badge (topbar, desktop) */}
+            {user && badge && (
+              <span
+                className="hidden sm:inline-block rounded-full px-3 py-1 text-xs font-bold"
+                style={{ backgroundColor: badge.bg, color: badge.text }}
+              >
+                {roleLabel[user.role]}
+              </span>
+            )}
           </div>
         </header>
 

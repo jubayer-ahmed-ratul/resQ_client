@@ -81,6 +81,7 @@ export interface User {
   name: string;
   email: string;
   role: "ADMIN" | "COORDINATOR" | "OPERATOR" | "CITIZEN";
+  status?: "ACTIVE" | "INACTIVE";
 }
 
 export interface Incident {
@@ -186,6 +187,12 @@ export const authApi = {
   me: (token: string) =>
     api.get<{ success: boolean; data: User }>(
       "/auth/me", token
+    ),
+
+  /** Update own profile — role change not allowed by backend */
+  updateMe: (body: { name?: string; email?: string; password?: string }, token: string) =>
+    api.patch<{ success: boolean; message: string; data: User }>(
+      "/auth/me", body, token
     ),
 };
 
@@ -484,6 +491,24 @@ export const resourceApi = {
     api.patch<{ success: boolean; message: string; data: Resource }>(
       `/resources/${id}`, body, token
     ),
+
+  /** Admin only — assign an Operator to a resource */
+  assignOperator: (id: string, operatorId: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: Resource }>(
+      `/resources/${id}/assign-operator`, { operatorId }, token
+    ),
+
+  /** Admin only — remove Operator from a resource */
+  removeOperator: (id: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: Resource }>(
+      `/resources/${id}/remove-operator`, {}, token
+    ),
+
+  /** Admin only — deactivate a resource */
+  deactivate: (id: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: Resource }>(
+      `/resources/${id}/deactivate`, {}, token
+    ),
 };
 
 // ── Hospitals API ──────────────────────────────────────────
@@ -523,6 +548,128 @@ export const hospitalApi = {
     api.patch<{ success: boolean; message: string; data: Hospital }>(
       `/hospitals/${id}`, body, token
     ),
+
+  /** Admin only — assign an Operator to a hospital */
+  assignOperator: (id: string, operatorId: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: Hospital }>(
+      `/hospitals/${id}/assign-operator`, { operatorId }, token
+    ),
+
+  /** Admin only — remove Operator from a hospital */
+  removeOperator: (id: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: Hospital }>(
+      `/hospitals/${id}/remove-operator`, {}, token
+    ),
+
+  /** Admin only — deactivate a hospital */
+  deactivate: (id: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: Hospital }>(
+      `/hospitals/${id}/deactivate`, {}, token
+    ),
+};
+
+// ── User Management API (Admin only) ──────────────────────
+export interface UserListParams {
+  page?: number;
+  limit?: number;
+  role?: User["role"];
+}
+
+export interface CreateUserBody {
+  name: string;
+  email: string;
+  password: string;
+  role: User["role"];
+}
+
+export interface UpdateUserBody {
+  name?: string;
+  email?: string;
+  password?: string;
+  role?: User["role"];
+  status?: "ACTIVE" | "INACTIVE";
+}
+
+export const userApi = {
+  list: (token: string, params?: UserListParams) => {
+    const query = params
+      ? "?" + new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v !== undefined)
+              .map(([k, v]) => [k, String(v)])
+          )
+        ).toString()
+      : "";
+    return api.get<{ success: boolean; data: PaginatedResponse<User> }>(
+      `/users${query}`, token
+    );
+  },
+
+  getById: (id: string, token: string) =>
+    api.get<{ success: boolean; data: User }>(
+      `/users/${id}`, token
+    ),
+
+  /** Admin creates a user with any role — dedicated admin endpoint */
+  create: (body: CreateUserBody, token: string) =>
+    api.post<{ success: boolean; message: string; data: User }>(
+      "/users", body, token
+    ),
+
+  update: (id: string, body: UpdateUserBody, token: string) =>
+    api.patch<{ success: boolean; message: string; data: User }>(
+      `/users/${id}`, body, token
+    ),
+
+  deactivate: (id: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: User }>(
+      `/users/${id}/deactivate`, {}, token
+    ),
+
+  activate: (id: string, token: string) =>
+    api.patch<{ success: boolean; message: string; data: User }>(
+      `/users/${id}/activate`, {}, token
+    ),
+};
+
+// ── Audit Log ──────────────────────────────────────────────
+export type AuditEntity = "INCIDENT" | "ASSIGNMENT" | "RESOURCE" | "HOSPITAL" | "USER";
+
+export interface AuditLog {
+  id: string;
+  entity: AuditEntity;
+  entityId: string;
+  action: string;
+  actorId: string;
+  actorRole: User["role"];
+  actorName?: string;
+  changes?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface AuditLogListParams {
+  page?: number;
+  limit?: number;
+  entity?: AuditEntity;
+  actorId?: string;
+}
+
+export const auditLogApi = {
+  list: (token: string, params?: AuditLogListParams) => {
+    const query = params
+      ? "?" + new URLSearchParams(
+          Object.fromEntries(
+            Object.entries(params)
+              .filter(([, v]) => v !== undefined)
+              .map(([k, v]) => [k, String(v)])
+          )
+        ).toString()
+      : "";
+    return api.get<{ success: boolean; data: PaginatedResponse<AuditLog> }>(
+      `/audit-logs${query}`, token
+    );
+  },
 };
 
 // ── Reoptimization API ─────────────────────────────────────

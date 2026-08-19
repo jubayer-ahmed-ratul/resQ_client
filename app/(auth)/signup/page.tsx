@@ -1,19 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api";
-import { CheckCircle2 } from "lucide-react";
+import { getStoredUser, roleLabel, type UserRole } from "@/lib/auth";
+import { CheckCircle2, Info } from "lucide-react";
 
 export default function SignupPage() {
-  const router = useRouter();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const router   = useRouter();
+  const [name, setName]         = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
+  const [success, setSuccess]   = useState(false);
+
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    const token  = localStorage.getItem("token");
+    const stored = getStoredUser();
+    if (token && stored) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -21,7 +31,9 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const res = await authApi.register({ name, email, password });
+      // Public signup always creates a CITIZEN account.
+      // Admin must use the Users management page to create other roles.
+      const res = await authApi.register({ name, email, password, role: "CITIZEN" });
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
       setSuccess(true);
@@ -48,6 +60,22 @@ export default function SignupPage() {
         <p className="mt-1.5 text-sm" style={{ color: "#6B7280" }}>
           Join resqBuddy and respond faster
         </p>
+      </div>
+
+      {/* Role note */}
+      <div
+        className="mb-5 flex items-start gap-3 rounded-xl border px-4 py-3 text-sm"
+        style={{
+          backgroundColor: "rgba(25,195,177,0.04)",
+          borderColor: "rgba(25,195,177,0.2)",
+          color: "#374151",
+        }}
+      >
+        <Info className="h-4 w-4 mt-0.5 shrink-0" style={{ color: "#19C3B1" }} />
+        <span>
+          Public registration creates a <strong>Citizen</strong> account.
+          Operators and Coordinators are created by an Admin.
+        </span>
       </div>
 
       {/* Success message */}
@@ -135,17 +163,42 @@ export default function SignupPage() {
             type="password"
             autoComplete="new-password"
             required
+            minLength={6}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="Min. 8 characters"
+            placeholder="Min. 6 characters"
             className="w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition-colors focus:border-[#19C3B1] focus:ring-2 focus:ring-[#19C3B1]/20"
             style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
           />
         </div>
 
+        {/* Role display — always CITIZEN for public signup */}
+        <div>
+          <label
+            className="mb-1.5 block text-sm font-medium"
+            style={{ color: "#374151" }}
+          >
+            Role
+          </label>
+          <div
+            className="flex items-center gap-2 w-full rounded-xl border px-4 py-2.5 text-sm"
+            style={{ borderColor: "rgba(11,31,51,0.1)", color: "#6B7280", backgroundColor: "rgba(11,31,51,0.02)" }}
+          >
+            <span
+              className="rounded-full px-2.5 py-0.5 text-xs font-bold"
+              style={{ backgroundColor: "rgba(25,195,177,0.12)", color: "#19C3B1" }}
+            >
+              {roleLabel["CITIZEN"]}
+            </span>
+            <span className="text-xs" style={{ color: "#9CA3AF" }}>
+              (assigned automatically for public signup)
+            </span>
+          </div>
+        </div>
+
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || success}
           className="w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1A3550] disabled:opacity-60 disabled:cursor-not-allowed"
           style={{ backgroundColor: "#0B1F33" }}
         >

@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { hospitalApi, getToken, type Hospital } from "@/lib/api";
-import { Building2, Bed, MapPin, ActivitySquare, Plus, Pencil } from "lucide-react";
+import {
+  canCreateHospital,
+  canViewAllHospitals,
+  canEditHospital,
+  getStoredUser,
+  type AuthUser,
+} from "@/lib/auth";
+import { Building2, Bed, MapPin, ActivitySquare, Plus, Pencil, Lock } from "lucide-react";
 import Link from "next/link";
 
 const statusColor: Record<Hospital["status"], string> = {
@@ -35,14 +42,25 @@ function CapacityBar({ used, total, label }: { used: number; total: number; labe
 
 export default function HospitalsPage() {
   const router = useRouter();
-  const [hospitals, setHospitals] = useState<Hospital[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState("");
+  const [user, setUser]               = useState<AuthUser | null>(null);
+  const [hospitals, setHospitals]     = useState<Hospital[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
   useEffect(() => {
     const token = getToken();
     if (!token) { router.replace("/login"); return; }
+
+    const stored = getStoredUser();
+    if (!stored) { router.replace("/login"); return; }
+    setUser(stored);
+
+    // CITIZEN cannot access hospitals page
+    if (stored.role === "CITIZEN") {
+      router.replace("/dashboard");
+      return;
+    }
 
     setLoading(true);
     hospitalApi.list(token, statusFilter ? { status: statusFilter } : undefined)
@@ -50,6 +68,10 @@ export default function HospitalsPage() {
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [router, statusFilter]);
+
+  if (!user) return null;
+
+  const isOperator = user.role === "OPERATOR";
 
   return (
     <div className="space-y-6">
@@ -60,30 +82,56 @@ export default function HospitalsPage() {
             Hospitals
           </h1>
           <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
-            Monitor hospital capacity and availability
+            {isOperator
+              ? "View hospitals — update only your assigned hospital"
+              : "Monitor hospital capacity and availability"}
           </p>
         </div>
-        <Link
-          href="/dashboard/hospitals/new"
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A]"
-          style={{ backgroundColor: "#19C3B1" }}
-        >
-          <Plus className="h-4 w-4" />
-          Add Hospital
-        </Link>
+
+        {/* Only ADMIN can create hospitals */}
+        {canCreateHospital(user.role) && (
+          <Link
+            href="/dashboard/hospitals/new"
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A]"
+            style={{ backgroundColor: "#19C3B1" }}
+          >
+            <Plus className="h-4 w-4" />
+            Add Hospital
+          </Link>
+        )}
       </div>
 
-      {/* Filter */}
-      <div className="flex gap-3">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
-          style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
-          <option value="">All Status</option>
-          {["OPERATIONAL","FULL","CLOSED"].map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </div>
+      {/* Operator notice */}
+      {isOperator && (
+        <div
+          className="flex items-center gap-2 rounded-xl border px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "rgba(249,115,22,0.06)",
+            borderColor: "rgba(249,115,22,0.2)",
+            color: "#0B1F33",
+          }}
+        >
+          <Lock className="h-4 w-4 shrink-0" style={{ color: "#F97316" }} />
+          You can only update hospitals assigned to you. Editing others will be blocked by the server.
+        </div>
+      )}
+
+      {/* Status filter — Admin/Coordinator */}
+      {canViewAllHospitals(user.role) && (
+        <div className="flex gap-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
+            style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
+          >
+            <option value="">All Status</option>
+            {["OPERATIONAL","LIMITED","CLOSED"].map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (
@@ -91,22 +139,28 @@ export default function HospitalsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#19C3B1] border-t-transparent" />
         </div>
       ) : error ? (
-        <div className="rounded-xl border px-4 py-3 text-sm"
-          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
+        <div
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}
+        >
           {error}
         </div>
       ) : hospitals.length === 0 ? (
-        <div className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
-          style={{ borderColor: "rgba(11,31,51,0.15)" }}>
+        <div
+          className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
+          style={{ borderColor: "rgba(11,31,51,0.15)" }}
+        >
           <Building2 className="h-8 w-8" style={{ color: "#9CA3AF" }} />
           <p className="text-sm" style={{ color: "#6B7280" }}>No hospitals found</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {hospitals.map((h) => (
-            <div key={h.id}
+            <div
+              key={h.id}
               className="rounded-2xl border bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-              style={{ borderColor: "rgba(11,31,51,0.08)" }}>
+              style={{ borderColor: "rgba(11,31,51,0.08)" }}
+            >
               {/* Header */}
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -144,13 +198,17 @@ export default function HospitalsPage() {
                     {h.availableICUBeds} ICU free
                   </div>
                 </div>
-                <Link
-                  href={`/dashboard/hospitals/${h.id}/edit`}
-                  className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-gray-50"
-                  style={{ borderColor: "rgba(11,31,51,0.15)", color: "#6B7280" }}
-                >
-                  <Pencil className="h-3 w-3" /> Edit
-                </Link>
+
+                {/* Edit — Admin always, Operator for their assigned (backend enforces) */}
+                {canEditHospital(user.role) && (
+                  <Link
+                    href={`/dashboard/hospitals/${h.id}/edit`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-gray-50"
+                    style={{ borderColor: "rgba(11,31,51,0.15)", color: "#6B7280" }}
+                  >
+                    <Pencil className="h-3 w-3" /> Edit
+                  </Link>
+                )}
               </div>
             </div>
           ))}

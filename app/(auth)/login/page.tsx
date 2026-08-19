@@ -1,18 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authApi } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import { CheckCircle2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
+  const [success, setSuccess]   = useState(false);
+
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    const token  = localStorage.getItem("token");
+    const stored = getStoredUser();
+    if (token && stored) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -24,7 +34,13 @@ export default function LoginPage() {
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("user", JSON.stringify(res.data.user));
       setSuccess(true);
-      setTimeout(() => router.push("/dashboard"), 1500);
+      // Role-based redirect after login
+      const role = res.data.user.role;
+      const redirect =
+        role === "OPERATOR" ? "/dashboard/assignments" :
+        role === "CITIZEN"  ? "/dashboard/incidents"   :
+        "/dashboard";
+      setTimeout(() => router.push(redirect), 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

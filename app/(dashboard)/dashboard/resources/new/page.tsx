@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { resourceApi, getToken, type CreateResourceBody } from "@/lib/api";
+import { canCreateResource, getStoredUser } from "@/lib/auth";
 import { ArrowLeft, CheckCircle2, MapPin } from "lucide-react";
 import LocationPicker, { MapPanel } from "@/components/shared/location-picker";
 
@@ -12,6 +13,14 @@ export default function NewResourcePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [success, setSuccess] = useState(false);
+
+  // Guard: only ADMIN can create resources
+  useEffect(() => {
+    const user = getStoredUser();
+    if (!user || !canCreateResource(user.role)) {
+      router.replace("/dashboard/resources");
+    }
+  }, [router]);
 
   const [form, setForm] = useState<CreateResourceBody>({
     name: "",

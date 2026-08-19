@@ -1,15 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Menu, X, Shield, Zap } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Menu, X, Shield, Zap, LayoutDashboard, LogOut } from "lucide-react";
+import { getStoredUser, roleBadgeColor, roleLabel, type AuthUser } from "@/lib/auth";
 
 const navLinks = [
-  { name: "Home", path: "/#home" },
+  { name: "Home",         path: "/#home"         },
   { name: "How It Works", path: "/#how-it-works" },
-  { name: "Features", path: "/#features" },
+  { name: "Features",     path: "/#features"     },
   { name: "Architecture", path: "/#architecture" },
 ];
 
@@ -31,10 +31,23 @@ function handleAnchorClick(
 }
 
 export default function Navbar() {
-  const [scrolled, setScrolled] = useState(false);
+  const [scrolled, setScrolled]           = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [loggedInUser, setLoggedInUser]   = useState<AuthUser | null>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  const router   = useRouter();
+
+  // Detect logged-in state
+  useEffect(() => {
+    const sync = () => {
+      const token = localStorage.getItem("token");
+      setLoggedInUser(token ? getStoredUser() : null);
+    };
+    sync();
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
+  }, []);
 
   // Scroll effect
   useEffect(() => {
@@ -128,20 +141,46 @@ export default function Navbar() {
                   </Link>
                 ))}
                 <div className="border-t border-gray-100 mt-2 pt-2">
-                  <Link
-                    href="/login"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-[#19C3B1] font-semibold hover:bg-gray-50"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    href="/signup"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-[#19C3B1] font-semibold hover:bg-gray-50"
-                  >
-                    Sign Up
-                  </Link>
+                  {loggedInUser ? (
+                    <>
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="block px-4 py-2.5 text-sm text-[#19C3B1] font-semibold hover:bg-gray-50"
+                      >
+                        Dashboard
+                      </Link>
+                      <button
+                        onClick={() => {
+                          localStorage.removeItem("token");
+                          localStorage.removeItem("user");
+                          setLoggedInUser(null);
+                          setMobileMenuOpen(false);
+                          router.push("/login");
+                        }}
+                        className="block w-full text-left px-4 py-2.5 text-sm text-gray-500 font-semibold hover:bg-gray-50"
+                      >
+                        Logout
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href="/login"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="block px-4 py-2.5 text-sm text-[#19C3B1] font-semibold hover:bg-gray-50"
+                      >
+                        Login
+                      </Link>
+                      <Link
+                        href="/signup"
+                        onClick={() => setMobileMenuOpen(false)}
+                        className="block px-4 py-2.5 text-sm text-[#19C3B1] font-semibold hover:bg-gray-50"
+                      >
+                        Sign Up
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -213,40 +252,73 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Right: Theme Toggle & Auth Buttons */}
+        {/* Right: Auth Buttons / User state */}
         <div className="hidden lg:flex items-center gap-3">
-         
-          {/* Sign Up Button with Border */}
-          <Link
-            href="/signup"
-            className={`px-5 rounded-xl font-semibold transition-all duration-300 ${
-              scrolled
-                ? "bg-[#19C3B1] text-white hover:bg-[#14A89A]"
-                : "bg-white text-[#19C3B1] hover:bg-gray-50"
-            }`}
-            style={{
-              paddingTop: "8px",
-              paddingBottom: "8px",
-              fontSize: "15px",
-              border: "2px solid #19C3B1",
-            }}
-          >
-            Sign Up
-          </Link>
+          {loggedInUser ? (
+            <>
+              {/* Role badge */}
+              {(() => {
+                const badge = roleBadgeColor[loggedInUser.role];
+                return (
+                  <span
+                    className="rounded-full px-3 py-1 text-xs font-bold"
+                    style={{ backgroundColor: badge.bg, color: badge.text }}
+                  >
+                    {roleLabel[loggedInUser.role]}
+                  </span>
+                );
+              })()}
 
-          {/* Login Button */}
-          <Link
-            href="/login"
-            className="px-5 rounded-xl font-semibold text-white transition-all duration-300 hover:bg-[#1A3550]"
-            style={{
-              backgroundColor: "#0B1F33",
-              paddingTop: "8px",
-              paddingBottom: "8px",
-              fontSize: "15px",
-            }}
-          >
-            Login
-          </Link>
+              {/* Dashboard button */}
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-2 px-5 rounded-xl font-semibold text-white transition-all duration-300 hover:bg-[#14A89A]"
+                style={{ backgroundColor: "#19C3B1", paddingTop: "8px", paddingBottom: "8px", fontSize: "15px" }}
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                Dashboard
+              </Link>
+
+              {/* Logout */}
+              <button
+                onClick={() => {
+                  localStorage.removeItem("token");
+                  localStorage.removeItem("user");
+                  setLoggedInUser(null);
+                  router.push("/login");
+                }}
+                className="inline-flex items-center gap-2 px-4 rounded-xl font-semibold transition-all duration-300 hover:bg-gray-100"
+                style={{ color: "#6B7280", paddingTop: "8px", paddingBottom: "8px", fontSize: "15px", border: "1px solid rgba(11,31,51,0.12)" }}
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Sign Up Button */}
+              <Link
+                href="/signup"
+                className={`px-5 rounded-xl font-semibold transition-all duration-300 ${
+                  scrolled
+                    ? "bg-[#19C3B1] text-white hover:bg-[#14A89A]"
+                    : "bg-white text-[#19C3B1] hover:bg-gray-50"
+                }`}
+                style={{ paddingTop: "8px", paddingBottom: "8px", fontSize: "15px", border: "2px solid #19C3B1" }}
+              >
+                Sign Up
+              </Link>
+
+              {/* Login Button */}
+              <Link
+                href="/login"
+                className="px-5 rounded-xl font-semibold text-white transition-all duration-300 hover:bg-[#1A3550]"
+                style={{ backgroundColor: "#0B1F33", paddingTop: "8px", paddingBottom: "8px", fontSize: "15px" }}
+              >
+                Login
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

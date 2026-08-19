@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { incidentApi, getToken, type Incident } from "@/lib/api";
+import {
+  canCreateIncident,
+  canViewAllIncidents,
+  getStoredUser,
+  type AuthUser,
+} from "@/lib/auth";
 import { Plus, AlertTriangle, Clock, Users, ChevronRight, ArrowUpDown } from "lucide-react";
 
 const severityColor: Record<Incident["severity"], string> = {
@@ -45,15 +51,21 @@ function PriorityBadge({ score }: { score: number | null }) {
 
 export default function IncidentsPage() {
   const router = useRouter();
-  const [incidents, setIncidents]       = useState<Incident[]>([]);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [severityFilter, setSeverityFilter] = useState("");
-  const [sortBy, setSortBy]             = useState<"time" | "priority">("time");
+  const [user, setUser]                         = useState<AuthUser | null>(null);
+  const [incidents, setIncidents]               = useState<Incident[]>([]);
+  const [loading, setLoading]                   = useState(true);
+  const [error, setError]                       = useState("");
+  const [statusFilter, setStatusFilter]         = useState("");
+  const [severityFilter, setSeverityFilter]     = useState("");
+  const [sortBy, setSortBy]                     = useState<"time" | "priority">("time");
+
   useEffect(() => {
     const token = getToken();
     if (!token) { router.replace("/login"); return; }
+
+    const stored = getStoredUser();
+    if (!stored) { router.replace("/login"); return; }
+    setUser(stored);
 
     const params: Record<string, string> = {};
     if (statusFilter)   params.status   = statusFilter;
@@ -67,73 +79,130 @@ export default function IncidentsPage() {
       .finally(() => setLoading(false));
   }, [router, statusFilter, severityFilter, sortBy]);
 
+  // CITIZEN only sees their own reports (filtered by createdBy on backend,
+  // but we also label the section accordingly)
+  const isCitizenView = user?.role === "CITIZEN";
+  const isOperatorView = user?.role === "OPERATOR";
+
+  const pageTitle = isCitizenView
+    ? "My Reports"
+    : isOperatorView
+    ? "Assigned Incidents"
+    : "Incidents";
+
+  const pageSubtitle = isCitizenView
+    ? "Track your emergency reports"
+    : isOperatorView
+    ? "View incidents assigned to your resources"
+    : "Manage and track emergency incidents";
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0B1F33" }}>
-            Incidents
+            {pageTitle}
           </h1>
           <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
-            Manage and track emergency incidents
+            {pageSubtitle}
           </p>
         </div>
-        <Link
-          href="/dashboard/incidents/new"
-          className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A]"
-          style={{ backgroundColor: "#19C3B1" }}
-        >
-          <Plus className="h-4 w-4" />
-          New Incident
-        </Link>
+
+        {/* Only ADMIN, COORDINATOR, CITIZEN can create incidents */}
+        {user && canCreateIncident(user.role) && (
+          <Link
+            href="/dashboard/incidents/new"
+            className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A]"
+            style={{ backgroundColor: "#19C3B1" }}
+          >
+            <Plus className="h-4 w-4" />
+            {isCitizenView ? "Report Emergency" : "New Incident"}
+          </Link>
+        )}
       </div>
 
-      {/* Filters + Sort */}
-      <div className="flex flex-wrap items-center gap-3">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
-          style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
-          <option value="">All Status</option>
-          {["PENDING","VALIDATED","PROCESSING","ASSIGNED","DISPATCHED","RESOLVED","CANCELLED"].map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-
-        <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}
-          className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
-          style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
-          <option value="">All Severity</option>
-          {["LOW","MEDIUM","HIGH","CRITICAL"].map(s => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-
-        {/* Sort toggle */}
-        <div className="ml-auto flex items-center gap-1 rounded-xl border p-1"
-          style={{ borderColor: "rgba(11,31,51,0.12)" }}>
-          <button
-            onClick={() => setSortBy("time")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              sortBy === "time"
-                ? "bg-[#0B1F33] text-white"
-                : "text-slate-500 hover:text-[#0B1F33]"
-            }`}
+      {/* Filters — hidden for OPERATOR (they only see their assignment) */}
+      {user && canViewAllIncidents(user.role) && (
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
+            style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
           >
-            <Clock className="h-3.5 w-3.5" /> By Time
-          </button>
-          <button
-            onClick={() => setSortBy("priority")}
-            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-              sortBy === "priority"
-                ? "bg-[#0B1F33] text-white"
-                : "text-slate-500 hover:text-[#0B1F33]"
-            }`}
+            <option value="">All Status</option>
+            {["PENDING","VALIDATED","PROCESSING","ASSIGNED","DISPATCHED","RESOLVED","CANCELLED"].map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          <select
+            value={severityFilter}
+            onChange={(e) => setSeverityFilter(e.target.value)}
+            className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
+            style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
           >
-            <ArrowUpDown className="h-3.5 w-3.5" /> By Priority
-          </button>
+            <option value="">All Severity</option>
+            {["LOW","MEDIUM","HIGH","CRITICAL"].map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          {/* Sort toggle */}
+          <div
+            className="ml-auto flex items-center gap-1 rounded-xl border p-1"
+            style={{ borderColor: "rgba(11,31,51,0.12)" }}
+          >
+            <button
+              onClick={() => setSortBy("time")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                sortBy === "time"
+                  ? "bg-[#0B1F33] text-white"
+                  : "text-slate-500 hover:text-[#0B1F33]"
+              }`}
+            >
+              <Clock className="h-3.5 w-3.5" /> By Time
+            </button>
+            <button
+              onClick={() => setSortBy("priority")}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                sortBy === "priority"
+                  ? "bg-[#0B1F33] text-white"
+                  : "text-slate-500 hover:text-[#0B1F33]"
+              }`}
+            >
+              <ArrowUpDown className="h-3.5 w-3.5" /> By Priority
+            </button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Role restriction notice */}
+      {isCitizenView && (
+        <div
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "rgba(25,195,177,0.06)",
+            borderColor: "rgba(25,195,177,0.2)",
+            color: "#0B1F33",
+          }}
+        >
+          You can only view your own emergency reports.
+        </div>
+      )}
+      {isOperatorView && (
+        <div
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "rgba(249,115,22,0.06)",
+            borderColor: "rgba(249,115,22,0.2)",
+            color: "#0B1F33",
+          }}
+        >
+          Showing incidents assigned to your resources only.
+        </div>
+      )}
 
       {/* Content */}
       {loading ? (
@@ -141,18 +210,30 @@ export default function IncidentsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#19C3B1] border-t-transparent" />
         </div>
       ) : error ? (
-        <div className="rounded-xl border px-4 py-3 text-sm"
-          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
+        <div
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}
+        >
           {error}
         </div>
       ) : incidents.length === 0 ? (
-        <div className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
-          style={{ borderColor: "rgba(11,31,51,0.15)" }}>
+        <div
+          className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
+          style={{ borderColor: "rgba(11,31,51,0.15)" }}
+        >
           <AlertTriangle className="h-8 w-8" style={{ color: "#9CA3AF" }} />
-          <p className="text-sm" style={{ color: "#6B7280" }}>No incidents found</p>
-          <Link href="/dashboard/incidents/new" className="text-sm font-semibold" style={{ color: "#19C3B1" }}>
-            Create your first incident
-          </Link>
+          <p className="text-sm" style={{ color: "#6B7280" }}>
+            {isCitizenView ? "No reports found" : "No incidents found"}
+          </p>
+          {user && canCreateIncident(user.role) && (
+            <Link
+              href="/dashboard/incidents/new"
+              className="text-sm font-semibold"
+              style={{ color: "#19C3B1" }}
+            >
+              {isCitizenView ? "Report your first emergency" : "Create your first incident"}
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -164,12 +245,12 @@ export default function IncidentsPage() {
               style={{ borderColor: "rgba(11,31,51,0.08)" }}
             >
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
-                incident.severity === "CRITICAL" ? "bg-red-100" :
+                incident.severity === "CRITICAL" ? "bg-red-100"    :
                 incident.severity === "HIGH"     ? "bg-orange-100" :
                 incident.severity === "MEDIUM"   ? "bg-yellow-100" : "bg-emerald-100"
               }`}>
                 <AlertTriangle className={`h-5 w-5 ${
-                  incident.severity === "CRITICAL" ? "text-red-600" :
+                  incident.severity === "CRITICAL" ? "text-red-600"    :
                   incident.severity === "HIGH"     ? "text-orange-600" :
                   incident.severity === "MEDIUM"   ? "text-yellow-600" : "text-emerald-600"
                 }`} />
@@ -186,7 +267,10 @@ export default function IncidentsPage() {
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusColor[incident.status]}`}>
                     {incident.status}
                   </span>
-                  <PriorityBadge score={incident.priorityScore} />
+                  {/* Priority shown to Admin/Coordinator only */}
+                  {user && canViewAllIncidents(user.role) && (
+                    <PriorityBadge score={incident.priorityScore} />
+                  )}
                   <span className="flex items-center gap-1 text-xs" style={{ color: "#9CA3AF" }}>
                     <Users className="h-3 w-3" />{incident.affectedPeople} affected
                   </span>

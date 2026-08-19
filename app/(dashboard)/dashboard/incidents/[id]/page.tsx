@@ -9,6 +9,11 @@ import {
   type ResourceRecommendation, type DecisionLog, type ReoptimizationLog,
 } from "@/lib/api";
 import {
+  canManageIncidents,
+  canViewAuditLogs,
+  getStoredUser,
+} from "@/lib/auth";
+import {
   ArrowLeft, AlertTriangle, Clock, Users, MapPin,
   Zap, CheckCircle2, Loader2, Truck, ChevronDown, ChevronUp,
   XCircle, History, ShieldCheck, RefreshCw, ClipboardList, GitMerge,
@@ -301,17 +306,18 @@ export default function IncidentDetailPage() {
 
   useEffect(() => {
     const token = getToken();
-    const stored = localStorage.getItem("user");
     if (!token) { router.replace("/login"); return; }
-    if (stored) setUser(JSON.parse(stored) as User);
+
+    const storedUser = getStoredUser();
+    if (storedUser) setUser(storedUser as User);
 
     incidentApi.getById(id, token)
       .then((res) => setIncident(res.data))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
 
-    const storedUser = stored ? JSON.parse(stored) as User : null;
-    if (storedUser && ["ADMIN", "COORDINATOR"].includes(storedUser.role)) {
+    // Decision + reoptimization logs: Admin and Coordinator only
+    if (storedUser && canViewAuditLogs(storedUser.role)) {
       setDecLoading(true);
       decisionApi.listByIncident(id, token)
         .then((res) => setDecisions(res.data))
@@ -326,7 +332,8 @@ export default function IncidentDetailPage() {
     }
   }, [id, router]);
 
-  const canManage = user && ["ADMIN", "COORDINATOR"].includes(user.role);
+  // Only Admin/Coordinator can validate, change status, assign resources
+  const canManage = user && canManageIncidents(user.role);
 
   const handleValidate = async () => {
     const token = getToken();

@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { incidentApi, getToken, type CreateIncidentBody } from "@/lib/api";
+import { canCreateIncident, getStoredUser } from "@/lib/auth";
 import { ArrowLeft, CheckCircle2, MapPin } from "lucide-react";
 import LocationPicker, { MapPanel } from "@/components/shared/location-picker";
 
@@ -17,6 +18,14 @@ export default function NewIncidentPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
   const [success, setSuccess] = useState(false);
+
+  // Guard: only ADMIN, COORDINATOR, CITIZEN can create incidents
+  useEffect(() => {
+    const user = getStoredUser();
+    if (user && !canCreateIncident(user.role)) {
+      router.replace("/dashboard/incidents");
+    }
+  }, [router]);
 
   const [form, setForm] = useState<CreateIncidentBody>({
     title: "",

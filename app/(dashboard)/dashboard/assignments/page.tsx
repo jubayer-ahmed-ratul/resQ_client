@@ -4,8 +4,15 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   assignmentApi, reoptimizationApi, getToken,
-  type Assignment, type User, type ReoptimizeResult,
+  type Assignment, type ReoptimizeResult,
 } from "@/lib/api";
+import {
+  canManageAssignments,
+  canReoptimize,
+  canViewAssignments,
+  getStoredUser,
+  type AuthUser,
+} from "@/lib/auth";
 import {
   ClipboardList, CheckCircle2, XCircle, Loader2,
   Clock, ChevronDown, ChevronUp, RefreshCw,
@@ -20,26 +27,34 @@ const statusColor: Record<Assignment["status"], string> = {
 
 export default function AssignmentsPage() {
   const router = useRouter();
+  const [user, setUser]                   = useState<AuthUser | null>(null);
   const [assignments, setAssignments]     = useState<Assignment[]>([]);
-  const [user, setUser]                   = useState<User | null>(null);
   const [loading, setLoading]             = useState(true);
   const [error, setError]                 = useState("");
   const [statusFilter, setStatusFilter]   = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [expandedId, setExpandedId]       = useState<string | null>(null);
 
-  // Per-assignment reoptimize state
-  const [reoptResults, setReoptResults]   = useState<Record<string, ReoptimizeResult>>({});
-  const [reoptErrors, setReoptErrors]     = useState<Record<string, string>>({});
-
-  const canManage = user && ["ADMIN", "COORDINATOR", "OPERATOR"].includes(user.role);
-  const canReopt  = user && ["ADMIN", "COORDINATOR"].includes(user.role);
+  const [reoptResults, setReoptResults] = useState<Record<string, ReoptimizeResult>>({});
+  const [reoptErrors, setReoptErrors]   = useState<Record<string, string>>({});
 
   useEffect(() => {
     const token = getToken();
-    const stored = localStorage.getItem("user");
+    const stored = getStoredUser();
     if (!token) { router.replace("/login"); return; }
-    if (stored) setUser(JSON.parse(stored) as User);
+    if (!stored) { router.replace("/login"); return; }
+    setUser(stored);
+
+    // CITIZEN cannot access assignments
+    if (stored.role === "CITIZEN") {
+      router.replace("/dashboard");
+      return;
+    }
+
+    if (!canViewAssignments(stored.role)) {
+      router.replace("/dashboard");
+      return;
+    }
 
     const params: Record<string, string> = {};
     if (statusFilter) params.status = statusFilter;
@@ -87,7 +102,6 @@ export default function AssignmentsPage() {
     try {
       const res = await reoptimizationApi.reoptimize(id, { trigger: "RESOURCE_FAILURE" }, token);
       setReoptResults((prev) => ({ ...prev, [id]: res.data }));
-      // If a new assignment was created, refresh the list so the old one shows CANCELLED
       if (res.data.reoptimized) {
         const token2 = getToken()!;
         const params: Record<string, string> = {};
@@ -105,6 +119,14 @@ export default function AssignmentsPage() {
     }
   };
 
+  if (!user) return null;
+
+  // OPERATOR can complete/cancel (backend enforces assigned-only)
+  // ADMIN/COORDINATOR can also re-optimize
+  const canManage  = canManageAssignments(user.role);
+  const canReopt   = canReoptimize(user.role);
+  const isOperator = user.role === "OPERATOR";
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -113,15 +135,35 @@ export default function AssignmentsPage() {
           Assignments
         </h1>
         <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
-          Track and manage resource assignments
+          {isOperator
+            ? "Track and update your assigned tasks"
+            : "Track and manage resource assignments"}
         </p>
       </div>
 
+      {/* Operator notice */}
+      {isOperator && (
+        <div
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{
+            backgroundColor: "rgba(249,115,22,0.06)",
+            borderColor: "rgba(249,115,22,0.2)",
+            color: "#0B1F33",
+          }}
+        >
+          You can only complete or cancel assignments linked to your resources.
+          Other operations are restricted.
+        </div>
+      )}
+
       {/* Filter */}
       <div className="flex gap-3">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
-          style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
+          style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
+        >
           <option value="">All Status</option>
           {["PENDING", "ACTIVE", "COMPLETED", "CANCELLED"].map((s) => (
             <option key={s} value={s}>{s}</option>
@@ -130,8 +172,10 @@ export default function AssignmentsPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl border px-4 py-3 text-sm"
-          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
+        <div
+          className="rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}
+        >
           {error}
         </div>
       )}
@@ -142,8 +186,10 @@ export default function AssignmentsPage() {
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#19C3B1] border-t-transparent" />
         </div>
       ) : assignments.length === 0 ? (
-        <div className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
-          style={{ borderColor: "rgba(11,31,51,0.15)" }}>
+        <div
+          className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
+          style={{ borderColor: "rgba(11,31,51,0.15)" }}
+        >
           <ClipboardList className="h-8 w-8" style={{ color: "#9CA3AF" }} />
           <p className="text-sm" style={{ color: "#6B7280" }}>No assignments found</p>
         </div>
@@ -155,10 +201,11 @@ export default function AssignmentsPage() {
             const reoptError  = reoptErrors[a.id];
 
             return (
-              <div key={a.id}
+              <div
+                key={a.id}
                 className="rounded-2xl border bg-white shadow-sm transition-all"
-                style={{ borderColor: "rgba(11,31,51,0.08)" }}>
-
+                style={{ borderColor: "rgba(11,31,51,0.08)" }}
+              >
                 {/* Main row */}
                 <div className="flex items-center gap-4 p-4">
                   {/* Status icon */}
@@ -224,7 +271,7 @@ export default function AssignmentsPage() {
                           Cancel
                         </button>
 
-                        {/* Re-optimize — ADMIN/COORDINATOR only */}
+                        {/* Re-optimize — ADMIN/COORDINATOR only, NOT Operator */}
                         {canReopt && (
                           <button
                             onClick={() => handleReoptimize(a.id)}
@@ -258,23 +305,25 @@ export default function AssignmentsPage() {
 
                 {/* Re-optimize result banner */}
                 {reoptError && (
-                  <div className="mx-4 mb-3 rounded-xl border px-4 py-2.5 text-xs"
-                    style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
+                  <div
+                    className="mx-4 mb-3 rounded-xl border px-4 py-2.5 text-xs"
+                    style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}
+                  >
                     {reoptError}
                   </div>
                 )}
                 {reoptResult && (
-                  <div className="mx-4 mb-3 rounded-xl border px-4 py-3 text-xs space-y-1"
+                  <div
+                    className="mx-4 mb-3 rounded-xl border px-4 py-3 text-xs space-y-1"
                     style={{
-                      backgroundColor: reoptResult.reoptimized
-                        ? "rgba(25,195,177,0.06)"
-                        : "rgba(11,31,51,0.03)",
-                      borderColor: reoptResult.reoptimized
-                        ? "rgba(25,195,177,0.25)"
-                        : "rgba(11,31,51,0.1)",
-                    }}>
-                    <div className="flex items-center gap-2 font-semibold"
-                      style={{ color: reoptResult.reoptimized ? "#19C3B1" : "#6B7280" }}>
+                      backgroundColor: reoptResult.reoptimized ? "rgba(25,195,177,0.06)" : "rgba(11,31,51,0.03)",
+                      borderColor: reoptResult.reoptimized ? "rgba(25,195,177,0.25)" : "rgba(11,31,51,0.1)",
+                    }}
+                  >
+                    <div
+                      className="flex items-center gap-2 font-semibold"
+                      style={{ color: reoptResult.reoptimized ? "#19C3B1" : "#6B7280" }}
+                    >
                       {reoptResult.reoptimized
                         ? <><CheckCircle2 className="h-3.5 w-3.5" /> Re-optimized — new resource assigned</>
                         : reoptResult.replacementFound === false
@@ -293,8 +342,10 @@ export default function AssignmentsPage() {
 
                 {/* Expanded detail */}
                 {isExpanded && (
-                  <div className="border-t px-4 py-4 space-y-2"
-                    style={{ borderColor: "rgba(11,31,51,0.06)" }}>
+                  <div
+                    className="border-t px-4 py-4 space-y-2"
+                    style={{ borderColor: "rgba(11,31,51,0.06)" }}
+                  >
                     <div className="grid grid-cols-2 gap-3 text-xs">
                       <div>
                         <p className="font-medium mb-0.5" style={{ color: "#9CA3AF" }}>Assignment ID</p>
