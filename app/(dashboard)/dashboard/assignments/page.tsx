@@ -106,7 +106,7 @@ export default function AssignmentsPage() {
     cancelMutation.isPending   ? cancelMutation.variables   + "-cancel"   : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0B1F33" }}>Assignments</h1>
@@ -122,17 +122,11 @@ export default function AssignmentsPage() {
         </div>
       )}
 
-      {/* Filter */}
-      <div className="flex gap-3">
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
-          style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
-          <option value="">All Status</option>
-          {["PENDING","ACTIVE","COMPLETED","CANCELLED"].map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </div>
+      {/* ── Two-column body ── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_200px] lg:items-start">
+
+        {/* LEFT — list */}
+        <div className="space-y-3 min-w-0">
 
       {(completeMutation.isError || cancelMutation.isError) && (
         <div className="rounded-xl border px-4 py-3 text-sm"
@@ -304,6 +298,63 @@ export default function AssignmentsPage() {
           })}
         </div>
       )}
+        </div>{/* end LEFT */}
+
+        {/* RIGHT — sticky filter + stats */}
+        <div className="lg:sticky lg:top-6 space-y-4">
+          <div className="rounded-2xl border bg-white p-4 shadow-sm"
+            style={{ borderColor: "rgba(11,31,51,0.08)" }}>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>
+              Filter
+            </p>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-[#19C3B1]"
+              style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
+              <option value="">All Status</option>
+              {["PENDING","ACTIVE","COMPLETED","CANCELLED"].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            {statusFilter && (
+              <button onClick={() => setStatusFilter("")}
+                className="mt-2 w-full rounded-xl border py-1.5 text-xs font-semibold transition-colors hover:bg-gray-50"
+                style={{ borderColor: "rgba(11,31,51,0.12)", color: "#6B7280" }}>
+                Clear filter
+              </button>
+            )}
+          </div>
+
+          {!isLoading && (
+            <div className="rounded-xl border px-4 py-3 text-center"
+              style={{ borderColor: "rgba(11,31,51,0.08)", backgroundColor: "rgba(11,31,51,0.02)" }}>
+              <p className="text-2xl font-bold" style={{ color: "#0B1F33" }}>{assignments.length}</p>
+              <p className="text-xs" style={{ color: "#9CA3AF" }}>
+                {statusFilter ? `${statusFilter.toLowerCase()} assignments` : "total assignments"}
+              </p>
+            </div>
+          )}
+
+          {/* Status breakdown */}
+          {!isLoading && assignments.length > 0 && (
+            <div className="rounded-2xl border bg-white p-4 shadow-sm space-y-2"
+              style={{ borderColor: "rgba(11,31,51,0.08)" }}>
+              <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "#9CA3AF" }}>Breakdown</p>
+              {(["ACTIVE","PENDING","COMPLETED","CANCELLED"] as const).map((s) => {
+                const count = assignments.filter((a) => a.status === s).length;
+                if (!count) return null;
+                const colorMap = { ACTIVE: "#3B82F6", PENDING: "#64748B", COMPLETED: "#10B981", CANCELLED: "#9CA3AF" };
+                return (
+                  <div key={s} className="flex items-center justify-between text-xs">
+                    <span style={{ color: "#374151" }}>{s}</span>
+                    <span className="font-bold" style={{ color: colorMap[s] }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+      </div>{/* end grid */}
     </div>
   );
 }
