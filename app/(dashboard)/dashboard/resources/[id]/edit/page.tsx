@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { resourceApi, getToken, type Resource, type ResourceStatus } from "@/lib/api";
 import { canEditResource, isAdmin, getStoredUser, type AuthUser } from "@/lib/auth";
 import { ArrowLeft, CheckCircle2, MapPin, Lock, UserPlus, UserMinus, Loader2 } from "lucide-react";
@@ -10,11 +11,11 @@ import LocationPicker, { MapPanel } from "@/components/shared/location-picker";
 
 export default function EditResourcePage() {
   const { id } = useParams<{ id: string }>();
-  const router  = useRouter();
+  const router      = useRouter();
+  const queryClient = useQueryClient();
 
   const [user, setUser]         = useState<AuthUser | null>(null);
   const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
   const [error, setError]       = useState("");
   const [success, setSuccess]   = useState(false);
 
@@ -68,19 +69,22 @@ export default function EditResourcePage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-    setSaving(true);
     const token = getToken();
     if (!token) { router.replace("/login"); return; }
-    try {
-      await resourceApi.update(id, form, token);
+    updateMutation.mutate(form);
+  };
+
+  // ── useMutation for update ──────────────────────────────
+  const updateMutation = useMutation({
+    mutationFn: (body: typeof form) => resourceApi.update(id, body, getToken()!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["resources"] });
+      queryClient.invalidateQueries({ queryKey: ["resource", id] });
       setSuccess(true);
       setTimeout(() => router.push("/dashboard/resources"), 1500);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update resource");
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Failed to update resource"),
+  });
 
   const handleAssignOperator = async () => {
     if (!operatorId.trim()) return;
@@ -235,10 +239,10 @@ export default function EditResourcePage() {
               style={{ borderColor: "rgba(11,31,51,0.15)", color: "#6B7280" }}>
               Cancel
             </Link>
-            <button type="submit" disabled={saving || success}
+            <button type="submit" disabled={updateMutation.isPending || success}
               className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A] disabled:opacity-60"
               style={{ backgroundColor: "#19C3B1" }}>
-              {saving ? "Saving…" : "Save Changes"}
+              {updateMutation.isPending ? "Saving…" : "Save Changes"}
             </button>
           </div>
         </form>

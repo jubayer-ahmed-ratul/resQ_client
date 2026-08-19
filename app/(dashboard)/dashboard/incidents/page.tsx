@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { incidentApi, getToken, type Incident } from "@/lib/api";
 import {
@@ -10,6 +11,7 @@ import {
   getStoredUser,
   type AuthUser,
 } from "@/lib/auth";
+import { TableSkeleton } from "@/components/ui/TableSkeleton";
 import { Plus, AlertTriangle, Clock, Users, ChevronRight, ArrowUpDown } from "lucide-react";
 
 const severityColor: Record<Incident["severity"], string> = {
@@ -30,13 +32,8 @@ const statusColor: Record<Incident["status"], string> = {
 };
 
 function PriorityBadge({ score }: { score: number | null }) {
-  if (score === null) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-400">
-        ⚪ N/A
-      </span>
-    );
-  }
+  if (score === null)
+    return <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-400">⚪ N/A</span>;
   const { emoji, color } =
     score >= 75 ? { emoji: "🔴", color: "bg-red-100 text-red-700" } :
     score >= 50 ? { emoji: "🟠", color: "bg-orange-100 text-orange-700" } :
@@ -50,46 +47,41 @@ function PriorityBadge({ score }: { score: number | null }) {
 }
 
 export default function IncidentsPage() {
-  const router = useRouter();
-  const [user, setUser]                         = useState<AuthUser | null>(null);
-  const [incidents, setIncidents]               = useState<Incident[]>([]);
-  const [loading, setLoading]                   = useState(true);
-  const [error, setError]                       = useState("");
-  const [statusFilter, setStatusFilter]         = useState("");
-  const [severityFilter, setSeverityFilter]     = useState("");
-  const [sortBy, setSortBy]                     = useState<"time" | "priority">("time");
+  const router      = useRouter();
+  const queryClient = useQueryClient();
+  const [user, setUser]                     = useState<AuthUser | null>(null);
+  const [statusFilter, setStatusFilter]     = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [sortBy, setSortBy]                 = useState<"time" | "priority">("time");
 
+  // Auth guard
   useEffect(() => {
     const token = getToken();
-    if (!token) { router.replace("/login"); return; }
-
     const stored = getStoredUser();
-    if (!stored) { router.replace("/login"); return; }
+    if (!token || !stored) { router.replace("/login"); return; }
     setUser(stored);
+  }, [router]);
 
-    const params: Record<string, string> = {};
-    if (statusFilter)   params.status   = statusFilter;
-    if (severityFilter) params.severity = severityFilter;
-    if (sortBy === "priority") params.sort = "priority";
+  const token = getToken();
 
-    setLoading(true);
-    incidentApi.list(token, params)
-      .then((res) => setIncidents(res.data.data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [router, statusFilter, severityFilter, sortBy]);
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["incidents", statusFilter, severityFilter, sortBy],
+    queryFn: () => {
+      const params: Record<string, string> = {};
+      if (statusFilter)   params.status   = statusFilter;
+      if (severityFilter) params.severity = severityFilter;
+      if (sortBy === "priority") params.sort = "priority";
+      return incidentApi.list(token!, params).then((r) => r.data.data);
+    },
+    enabled: !!token && !!user,
+  });
 
-  // CITIZEN only sees their own reports (filtered by createdBy on backend,
-  // but we also label the section accordingly)
-  const isCitizenView = user?.role === "CITIZEN";
+  const incidents = data ?? [];
+
+  const isCitizenView  = user?.role === "CITIZEN";
   const isOperatorView = user?.role === "OPERATOR";
 
-  const pageTitle = isCitizenView
-    ? "My Reports"
-    : isOperatorView
-    ? "Assigned Incidents"
-    : "Incidents";
-
+  const pageTitle = isCitizenView ? "My Reports" : isOperatorView ? "Assigned Incidents" : "Incidents";
   const pageSubtitle = isCitizenView
     ? "Track your emergency reports"
     : isOperatorView
@@ -101,15 +93,9 @@ export default function IncidentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0B1F33" }}>
-            {pageTitle}
-          </h1>
-          <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
-            {pageSubtitle}
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0B1F33" }}>{pageTitle}</h1>
+          <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>{pageSubtitle}</p>
         </div>
-
-        {/* Only ADMIN, COORDINATOR, CITIZEN can create incidents */}
         {user && canCreateIncident(user.role) && (
           <Link
             href="/dashboard/incidents/new"
@@ -122,115 +108,74 @@ export default function IncidentsPage() {
         )}
       </div>
 
-      {/* Filters — hidden for OPERATOR (they only see their assignment) */}
+      {/* Filters */}
       {user && canViewAllIncidents(user.role) && (
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
             className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
-            style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
-          >
+            style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
             <option value="">All Status</option>
             {["PENDING","VALIDATED","PROCESSING","ASSIGNED","DISPATCHED","RESOLVED","CANCELLED"].map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-
-          <select
-            value={severityFilter}
-            onChange={(e) => setSeverityFilter(e.target.value)}
+          <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}
             className="rounded-xl border px-3 py-2 text-sm outline-none focus:border-[#19C3B1]"
-            style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
-          >
+            style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}>
             <option value="">All Severity</option>
             {["LOW","MEDIUM","HIGH","CRITICAL"].map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
-
-          {/* Sort toggle */}
-          <div
-            className="ml-auto flex items-center gap-1 rounded-xl border p-1"
-            style={{ borderColor: "rgba(11,31,51,0.12)" }}
-          >
-            <button
-              onClick={() => setSortBy("time")}
+          <div className="ml-auto flex items-center gap-1 rounded-xl border p-1"
+            style={{ borderColor: "rgba(11,31,51,0.12)" }}>
+            <button onClick={() => setSortBy("time")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                sortBy === "time"
-                  ? "bg-[#0B1F33] text-white"
-                  : "text-slate-500 hover:text-[#0B1F33]"
-              }`}
-            >
+                sortBy === "time" ? "bg-[#0B1F33] text-white" : "text-slate-500 hover:text-[#0B1F33]"
+              }`}>
               <Clock className="h-3.5 w-3.5" /> By Time
             </button>
-            <button
-              onClick={() => setSortBy("priority")}
+            <button onClick={() => setSortBy("priority")}
               className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                sortBy === "priority"
-                  ? "bg-[#0B1F33] text-white"
-                  : "text-slate-500 hover:text-[#0B1F33]"
-              }`}
-            >
+                sortBy === "priority" ? "bg-[#0B1F33] text-white" : "text-slate-500 hover:text-[#0B1F33]"
+              }`}>
               <ArrowUpDown className="h-3.5 w-3.5" /> By Priority
             </button>
           </div>
         </div>
       )}
 
-      {/* Role restriction notice */}
+      {/* Role notices */}
       {isCitizenView && (
-        <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{
-            backgroundColor: "rgba(25,195,177,0.06)",
-            borderColor: "rgba(25,195,177,0.2)",
-            color: "#0B1F33",
-          }}
-        >
+        <div className="rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(25,195,177,0.06)", borderColor: "rgba(25,195,177,0.2)", color: "#0B1F33" }}>
           You can only view your own emergency reports.
         </div>
       )}
       {isOperatorView && (
-        <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{
-            backgroundColor: "rgba(249,115,22,0.06)",
-            borderColor: "rgba(249,115,22,0.2)",
-            color: "#0B1F33",
-          }}
-        >
+        <div className="rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(249,115,22,0.06)", borderColor: "rgba(249,115,22,0.2)", color: "#0B1F33" }}>
           Showing incidents assigned to your resources only.
         </div>
       )}
 
       {/* Content */}
-      {loading ? (
-        <div className="flex h-40 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#19C3B1] border-t-transparent" />
-        </div>
-      ) : error ? (
-        <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}
-        >
-          {error}
+      {isLoading ? (
+        <TableSkeleton rows={8} cols={1} />
+      ) : isError ? (
+        <div className="rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
+          {error instanceof Error ? error.message : "Data load করা যায়নি। Refresh করো।"}
         </div>
       ) : incidents.length === 0 ? (
-        <div
-          className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
-          style={{ borderColor: "rgba(11,31,51,0.15)" }}
-        >
+        <div className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
+          style={{ borderColor: "rgba(11,31,51,0.15)" }}>
           <AlertTriangle className="h-8 w-8" style={{ color: "#9CA3AF" }} />
           <p className="text-sm" style={{ color: "#6B7280" }}>
             {isCitizenView ? "No reports found" : "No incidents found"}
           </p>
           {user && canCreateIncident(user.role) && (
-            <Link
-              href="/dashboard/incidents/new"
-              className="text-sm font-semibold"
-              style={{ color: "#19C3B1" }}
-            >
+            <Link href="/dashboard/incidents/new" className="text-sm font-semibold" style={{ color: "#19C3B1" }}>
               {isCitizenView ? "Report your first emergency" : "Create your first incident"}
             </Link>
           )}
@@ -243,6 +188,14 @@ export default function IncidentsPage() {
               href={`/dashboard/incidents/${incident.id}`}
               className="flex items-center gap-4 rounded-2xl border bg-white p-4 transition-all hover:-translate-y-0.5 hover:shadow-md"
               style={{ borderColor: "rgba(11,31,51,0.08)" }}
+              // Prefetch detail on hover
+              onMouseEnter={() =>
+                queryClient.prefetchQuery({
+                  queryKey: ["incident", incident.id],
+                  queryFn:  () => incidentApi.getById(incident.id, token!).then((r) => r.data),
+                  staleTime: 5 * 60 * 1000,
+                })
+              }
             >
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
                 incident.severity === "CRITICAL" ? "bg-red-100"    :
@@ -257,9 +210,7 @@ export default function IncidentsPage() {
               </div>
 
               <div className="min-w-0 flex-1">
-                <p className="truncate font-semibold text-sm" style={{ color: "#0B1F33" }}>
-                  {incident.title}
-                </p>
+                <p className="truncate font-semibold text-sm" style={{ color: "#0B1F33" }}>{incident.title}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${severityColor[incident.severity]}`}>
                     {incident.severity}
@@ -267,7 +218,6 @@ export default function IncidentsPage() {
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${statusColor[incident.status]}`}>
                     {incident.status}
                   </span>
-                  {/* Priority shown to Admin/Coordinator only */}
                   {user && canViewAllIncidents(user.role) && (
                     <PriorityBadge score={incident.priorityScore} />
                   )}
@@ -279,7 +229,6 @@ export default function IncidentsPage() {
                   </span>
                 </div>
               </div>
-
               <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "#9CA3AF" }} />
             </Link>
           ))}

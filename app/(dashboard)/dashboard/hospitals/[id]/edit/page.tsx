@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { hospitalApi, getToken, type Hospital, type HospitalStatus } from "@/lib/api";
 import { canEditHospital, isAdmin, getStoredUser, type AuthUser } from "@/lib/auth";
 import { ArrowLeft, CheckCircle2, MapPin, Lock, UserPlus, UserMinus, Loader2 } from "lucide-react";
@@ -10,11 +11,11 @@ import LocationPicker, { MapPanel } from "@/components/shared/location-picker";
 
 export default function EditHospitalPage() {
   const { id } = useParams<{ id: string }>();
-  const router  = useRouter();
+  const router      = useRouter();
+  const queryClient = useQueryClient();
 
   const [user, setUser]       = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
   const [success, setSuccess] = useState(false);
 
@@ -77,23 +78,25 @@ export default function EditHospitalPage() {
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
-    setSaving(true);
-    const token = getToken();
-    if (!token) { router.replace("/login"); return; }
-    try {
-      await hospitalApi.update(id, {
+    updateMutation.mutate();
+  };
+
+  // ── useMutation for update ──────────────────────────────
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      hospitalApi.update(id, {
         availableBeds:    form.availableBeds,
         availableICUBeds: form.availableICUBeds,
         status:           form.status,
-      }, token);
+      }, getToken()!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["hospitals"] });
+      queryClient.invalidateQueries({ queryKey: ["hospital", id] });
       setSuccess(true);
       setTimeout(() => router.push("/dashboard/hospitals"), 1500);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update hospital");
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    onError: (err) => setError(err instanceof Error ? err.message : "Failed to update hospital"),
+  });
 
   const handleAssignOperator = async () => {
     if (!operatorId.trim()) return;
@@ -258,10 +261,10 @@ export default function EditHospitalPage() {
               style={{ borderColor: "rgba(11,31,51,0.15)", color: "#6B7280" }}>
               Cancel
             </Link>
-            <button type="submit" disabled={saving || success}
+            <button type="submit" disabled={updateMutation.isPending || success}
               className="rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A] disabled:opacity-60"
               style={{ backgroundColor: "#19C3B1" }}>
-              {saving ? "Saving…" : "Save Changes"}
+              {updateMutation.isPending ? "Saving…" : "Save Changes"}
             </button>
           </div>
         </form>

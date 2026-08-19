@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { resourceApi, getToken, type Resource } from "@/lib/api";
 import {
   canCreateResource,
@@ -10,14 +11,15 @@ import {
   getStoredUser,
   type AuthUser,
 } from "@/lib/auth";
+import { CardSkeleton } from "@/components/ui/TableSkeleton";
 import { Truck, MapPin, Users, Plus, Pencil, Lock } from "lucide-react";
 import Link from "next/link";
 
 const typeColor: Record<Resource["type"], string> = {
-  AMBULANCE:    "bg-blue-100 text-blue-700",
-  RESCUE_TEAM:  "bg-orange-100 text-orange-700",
-  HELICOPTER:   "bg-purple-100 text-purple-700",
-  OTHER:        "bg-slate-100 text-slate-600",
+  AMBULANCE:   "bg-blue-100 text-blue-700",
+  RESCUE_TEAM: "bg-orange-100 text-orange-700",
+  HELICOPTER:  "bg-purple-100 text-purple-700",
+  OTHER:       "bg-slate-100 text-slate-600",
 };
 
 const statusColor: Record<Resource["status"], string> = {
@@ -29,42 +31,38 @@ const statusColor: Record<Resource["status"], string> = {
 };
 
 export default function ResourcesPage() {
-  const router = useRouter();
-  const [user, setUser]               = useState<AuthUser | null>(null);
-  const [resources, setResources]     = useState<Resource[]>([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState("");
-  const [typeFilter, setTypeFilter]   = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const router      = useRouter();
+  const queryClient = useQueryClient();
+  const [user, setUser]                     = useState<AuthUser | null>(null);
+  const [typeFilter, setTypeFilter]         = useState("");
+  const [statusFilter, setStatusFilter]     = useState("");
 
+  // Auth guard
   useEffect(() => {
     const token = getToken();
-    if (!token) { router.replace("/login"); return; }
-
     const stored = getStoredUser();
-    if (!stored) { router.replace("/login"); return; }
+    if (!token || !stored) { router.replace("/login"); return; }
+    if (stored.role === "CITIZEN") { router.replace("/dashboard"); return; }
     setUser(stored);
+  }, [router]);
 
-    // CITIZEN cannot access resources page — redirect to dashboard
-    if (stored.role === "CITIZEN") {
-      router.replace("/dashboard");
-      return;
-    }
+  const token = getToken();
 
-    const params: Record<string, string> = {};
-    if (typeFilter)   params.type   = typeFilter;
-    if (statusFilter) params.status = statusFilter;
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["resources", typeFilter, statusFilter],
+    queryFn:  () => {
+      const params: Record<string, string> = {};
+      if (typeFilter)   params.type   = typeFilter;
+      if (statusFilter) params.status = statusFilter;
+      return resourceApi.list(token!, params).then((r) => r.data.data);
+    },
+    enabled: !!token && !!user,
+  });
 
-    setLoading(true);
-    resourceApi.list(token, params)
-      .then((res) => setResources(res.data.data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [router, typeFilter, statusFilter]);
+  const resources = data ?? [];
 
   if (!user) return null;
 
-  // OPERATOR sees all resources for context but can only edit their assigned ones
   const isOperator = user.role === "OPERATOR";
 
   return (
@@ -72,45 +70,34 @@ export default function ResourcesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0B1F33" }}>
-            Resources
-          </h1>
+          <h1 className="text-2xl font-bold tracking-tight" style={{ color: "#0B1F33" }}>Resources</h1>
           <p className="mt-1 text-sm" style={{ color: "#6B7280" }}>
             {isOperator
               ? "View resources — update only your assigned ones"
               : "Manage emergency response resources"}
           </p>
         </div>
-
-        {/* Only ADMIN can create resources */}
         {canCreateResource(user.role) && (
           <Link
             href="/dashboard/resources/new"
             className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#14A89A]"
             style={{ backgroundColor: "#19C3B1" }}
           >
-            <Plus className="h-4 w-4" />
-            Add Resource
+            <Plus className="h-4 w-4" /> Add Resource
           </Link>
         )}
       </div>
 
       {/* Operator notice */}
       {isOperator && (
-        <div
-          className="flex items-center gap-2 rounded-xl border px-4 py-3 text-sm"
-          style={{
-            backgroundColor: "rgba(249,115,22,0.06)",
-            borderColor: "rgba(249,115,22,0.2)",
-            color: "#0B1F33",
-          }}
-        >
+        <div className="flex items-center gap-2 rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(249,115,22,0.06)", borderColor: "rgba(249,115,22,0.2)", color: "#0B1F33" }}>
           <Lock className="h-4 w-4 shrink-0" style={{ color: "#F97316" }} />
           You can only update resources assigned to you. Editing others will be blocked by the server.
         </div>
       )}
 
-      {/* Filters — Coordinator and Admin */}
+      {/* Filters */}
       {canViewAllResources(user.role) && (
         <div className="flex flex-wrap gap-3">
           <select
@@ -120,11 +107,10 @@ export default function ResourcesPage() {
             style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
           >
             <option value="">All Types</option>
-            {["AMBULANCE","RESCUE_TEAM","HELICOPTER","OTHER"].map((t) => (
-              <option key={t} value={t}>{t.replace("_"," ")}</option>
+            {["AMBULANCE", "RESCUE_TEAM", "HELICOPTER", "OTHER"].map((t) => (
+              <option key={t} value={t}>{t.replace("_", " ")}</option>
             ))}
           </select>
-
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -132,7 +118,7 @@ export default function ResourcesPage() {
             style={{ borderColor: "rgba(11,31,51,0.15)", color: "#0B1F33" }}
           >
             <option value="">All Status</option>
-            {["AVAILABLE","BUSY","UNAVAILABLE","MAINTENANCE","FAILED"].map((s) => (
+            {["AVAILABLE", "BUSY", "UNAVAILABLE", "MAINTENANCE", "FAILED"].map((s) => (
               <option key={s} value={s}>{s}</option>
             ))}
           </select>
@@ -140,22 +126,16 @@ export default function ResourcesPage() {
       )}
 
       {/* Content */}
-      {loading ? (
-        <div className="flex h-40 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#19C3B1] border-t-transparent" />
-        </div>
-      ) : error ? (
-        <div
-          className="rounded-xl border px-4 py-3 text-sm"
-          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}
-        >
-          {error}
+      {isLoading ? (
+        <CardSkeleton count={6} />
+      ) : isError ? (
+        <div className="rounded-xl border px-4 py-3 text-sm"
+          style={{ backgroundColor: "rgba(230,57,70,0.06)", borderColor: "rgba(230,57,70,0.2)", color: "#E63946" }}>
+          {error instanceof Error ? error.message : "Data load করা যায়নি। Refresh করো।"}
         </div>
       ) : resources.length === 0 ? (
-        <div
-          className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
-          style={{ borderColor: "rgba(11,31,51,0.15)" }}
-        >
+        <div className="flex h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed"
+          style={{ borderColor: "rgba(11,31,51,0.15)" }}>
           <Truck className="h-8 w-8" style={{ color: "#9CA3AF" }} />
           <p className="text-sm" style={{ color: "#6B7280" }}>No resources found</p>
         </div>
@@ -166,18 +146,25 @@ export default function ResourcesPage() {
               key={res.id}
               className="rounded-2xl border bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
               style={{ borderColor: "rgba(11,31,51,0.08)" }}
+              // Prefetch detail on hover
+              onMouseEnter={() =>
+                queryClient.prefetchQuery({
+                  queryKey: ["resource", res.id],
+                  queryFn:  () => resourceApi.getById(res.id, token!).then((r) => r.data),
+                  staleTime: 5 * 60 * 1000,
+                })
+              }
             >
-              {/* Header */}
               <div className="mb-4 flex items-start justify-between">
                 <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                  res.type === "AMBULANCE"   ? "bg-blue-100" :
+                  res.type === "AMBULANCE"   ? "bg-blue-100"   :
                   res.type === "HELICOPTER"  ? "bg-purple-100" :
                   res.type === "RESCUE_TEAM" ? "bg-orange-100" : "bg-slate-100"
                 }`}>
                   {res.type === "RESCUE_TEAM"
                     ? <Users className="h-5 w-5 text-orange-600" />
                     : <Truck className={`h-5 w-5 ${
-                        res.type === "AMBULANCE"  ? "text-blue-600" :
+                        res.type === "AMBULANCE"  ? "text-blue-600"   :
                         res.type === "HELICOPTER" ? "text-purple-600" : "text-slate-600"
                       }`} />
                   }
@@ -187,7 +174,6 @@ export default function ResourcesPage() {
                 </span>
               </div>
 
-              {/* Info */}
               <p className="font-semibold" style={{ color: "#0B1F33" }}>{res.name}</p>
               <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${typeColor[res.type]}`}>
                 {res.type.replace("_", " ")}
@@ -204,7 +190,6 @@ export default function ResourcesPage() {
                 </div>
               </div>
 
-              {/* Edit button — Admin always, Operator for all (backend enforces assigned-only) */}
               {canEditResource(user.role) && (
                 <div className="mt-4 flex justify-end">
                   <Link
